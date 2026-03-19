@@ -240,18 +240,51 @@ a:hover { text-decoration: underline; }
   padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
 }
 
+.transcript-wrap { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+
 .transcript-box {
-  width: 100%; min-height: 36px; max-height: 80px;
+  width: 100%; min-height: 40px; max-height: 100px;
   background: var(--surface2); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 8px 12px;
   font-size: 14px; color: var(--text-muted);
-  overflow-y: auto; line-height: 1.4; font-style: italic;
+  overflow-y: auto; line-height: 1.5;
+  font-family: inherit; resize: none;
+  transition: border-color .2s;
 }
-.transcript-box:empty::before {
-  content: 'Konuşmanız burada görünecek…';
-  color: var(--text-muted); opacity: .5;
+.transcript-box::placeholder { color: var(--text-muted); opacity: .5; font-style: italic; }
+.transcript-box:not([readonly]) {
+  border-color: var(--primary); color: var(--text);
+  background: var(--surface);
 }
-.transcript-box.has-text { color: var(--text); font-style: normal; }
+.transcript-box.has-text { color: var(--text); }
+
+/* ─── Confirm buttons ────────────────────────────────────────────────────── */
+.confirm-btns {
+  display: flex; gap: 8px; width: 100%;
+}
+.confirm-btn {
+  flex: 1; padding: 10px; border: none; border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .15s;
+  font-family: inherit;
+}
+.confirm-cancel-btn { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+.confirm-cancel-btn:hover { background: var(--border); color: var(--text); }
+.confirm-send-btn   { background: var(--primary);   color: #fff; }
+.confirm-send-btn:hover { opacity: .85; }
+
+/* ─── Record row (mic + cancel) ──────────────────────────────────────────── */
+.record-row {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  position: relative;
+}
+.cancel-rec-btn {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: rgba(239,68,68,.15); border: 2px solid var(--error);
+  color: var(--error); font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.cancel-rec-btn:hover, .cancel-rec-btn:active { background: rgba(239,68,68,.3); }
 
 .record-btn {
   width: 80px; height: 80px; border-radius: 50%;

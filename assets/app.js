@@ -119,8 +119,8 @@ function t(key) {
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
-let myLang       = document.getElementById('myLangSelect')?.value    || 'tr';
-let otherLang    = document.getElementById('otherLangSelect')?.value || 'en';
+let myLang        = document.getElementById('myLangSelect')?.value    || 'tr';
+let otherLang     = document.getElementById('otherLangSelect')?.value || 'en';
 let mediaRecorder = null;
 let audioChunks   = [];
 let isRecording   = false;
@@ -130,6 +130,8 @@ let autoPlay      = true;
 let audioUnlocked = false;
 let pendingQueue  = [];
 let isPlaying     = false;
+let pendingTranscript = '';   // transcription waiting for user confirmation
+let isConfirming  = false;    // confirm UI visible
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -143,6 +145,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   ['touchstart', 'mousedown', 'click', 'keydown'].forEach(evt =>
     document.addEventListener(evt, unlockAudio, { once: true, passive: true })
   );
+
+  // Wire up confirm/cancel buttons
+  document.getElementById('confirmSendBtn')?.addEventListener('click', confirmSend);
+  document.getElementById('confirmCancelBtn')?.addEventListener('click', cancelTranscript);
+  document.getElementById('cancelRecBtn')?.addEventListener('click', handleCancelRec);
 });
 
 function applyI18n() {
@@ -290,7 +297,7 @@ function scrollToBottom() {
 // ─── Recording ────────────────────────────────────────────────────────────────
 function startRec(e) {
   e.preventDefault();
-  if (isRecording || !HAS_API_KEY) return;
+  if (isRecording || isConfirming) return;
   if (!HAS_API_KEY) { setStatus(t('errorApi'), 'error'); return; }
   unlockAudio();
   doStartRec();
@@ -350,30 +357,51 @@ function cancelRec(e) {
 }
 
 function setRecordingUI(on) {
-  const btn   = document.getElementById('recordBtn');
-  const label = document.getElementById('recordLabel');
-  const icon  = document.getElementById('recordIcon');
+  const btn       = document.getElementById('recordBtn');
+  const label     = document.getElementById('recordLabel');
+  const icon      = document.getElementById('recordIcon');
+  const cancelBtn = document.getElementById('cancelRecBtn');
   if (!btn) return;
   if (on) {
     btn.classList.add('recording');
-    if (label) label.textContent = t('recording');
-    if (icon)  icon.textContent  = '⏹';
+    if (label)     label.textContent       = t('recording');
+    if (icon)      icon.textContent        = '⏹';
+    if (cancelBtn) cancelBtn.style.display = 'flex';
   } else {
     btn.classList.remove('recording');
     btn.classList.add('processing');
-    if (label) label.textContent = t('processing');
-    if (icon)  icon.textContent  = '⏳';
+    if (label)     label.textContent       = t('processing');
+    if (icon)      icon.textContent        = '⏳';
+    if (cancelBtn) cancelBtn.style.display = 'none';
   }
 }
 
 function setProcessingDone() {
-  const btn   = document.getElementById('recordBtn');
-  const label = document.getElementById('recordLabel');
-  const icon  = document.getElementById('recordIcon');
+  const btn       = document.getElementById('recordBtn');
+  const label     = document.getElementById('recordLabel');
+  const icon      = document.getElementById('recordIcon');
+  const cancelBtn = document.getElementById('cancelRecBtn');
   if (!btn) return;
   btn.classList.remove('processing', 'recording');
-  if (label) label.textContent = t('holdToSpeak');
-  if (icon)  icon.textContent  = '🎤';
+  if (label)     label.textContent       = t('holdToSpeak');
+  if (icon)      icon.textContent        = '🎤';
+  if (cancelBtn) cancelBtn.style.display = 'none';
+}
+
+function handleCancelRec(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  if (!isRecording) return;
+  isRecording = false;
+  if (mediaRecorder) {
+    mediaRecorder.onstop = () => {};   // discard
+    if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    mediaRecorder.stream?.getTracks().forEach(t => t.stop());
+  }
+  audioChunks = [];
+  setRecordingUI(false);
+  setProcessingDone();
+  setStatus('');
+  clearTranscript();
 }
 
 // ─── Audio processing ─────────────────────────────────────────────────────────
@@ -388,7 +416,7 @@ async function processAudio() {
   setStatus(`<span class="spinner"></span>${t('transcribing')}`);
   const formData = new FormData();
   formData.append('audio', blob, 'audio.' + mimeExt(mimeType));
-  formData.append('language', myLang);
+  formData.append('language', myLang);  // language hint for Whisper
 
   let transcribed = '';
   try {
@@ -402,9 +430,49 @@ async function processAudio() {
   }
 
   if (!transcribed) { setStatus(''); setProcessingDone(); clearTranscript(); return; }
-  showTranscript(transcribed);
 
-  // Step 2: Translate
+  // Show transcript and ask for confirmation
+  showTranscript(transcribed);
+  showConfirmUI(transcribed);
+}
+
+// ─── Confirm / cancel transcript ──────────────────────────────────────────────
+function showConfirmUI(text) {
+  pendingTranscript = text;
+  isConfirming      = true;
+  const box  = document.getElementById('transcriptBox');
+  const btns = document.getElementById('confirmBtns');
+  if (box)  { box.removeAttribute('readonly'); box.focus(); box.select(); }
+  if (btns)   btns.style.display = 'flex';
+  setProcessingDone();
+  setStatus('');
+}
+
+function hideConfirmUI() {
+  isConfirming      = false;
+  pendingTranscript = '';
+  const box  = document.getElementById('transcriptBox');
+  const btns = document.getElementById('confirmBtns');
+  if (box)  box.setAttribute('readonly', 'true');
+  if (btns) btns.style.display = 'none';
+}
+
+async function confirmSend() {
+  // Use whatever text is currently in the box (user may have edited it)
+  const box  = document.getElementById('transcriptBox');
+  const text = (box?.value || pendingTranscript).trim();
+  hideConfirmUI();
+  if (!text) { clearTranscript(); return; }
+  await doTranslate(text);
+}
+
+function cancelTranscript() {
+  hideConfirmUI();
+  clearTranscript();
+  setStatus('');
+}
+
+async function doTranslate(transcribed) {
   setStatus(`<span class="spinner"></span>${t('translating')}`);
   try {
     const data = await fetchJSON('api/translate.php', {
@@ -428,8 +496,6 @@ async function processAudio() {
   setStatus('');
   clearTranscript();
   setProcessingDone();
-  // Poll will pick it up and render + play for the other side.
-  // For the sender, also trigger a poll immediately.
   await pollMessages();
 }
 
@@ -443,14 +509,11 @@ function mimeExt(mime) {
 
 function showTranscript(text) {
   const box = document.getElementById('transcriptBox');
-  if (box) {
-    box.textContent = text;
-    box.classList.add('has-text');
-  }
+  if (box) { box.value = text; box.classList.add('has-text'); }
 }
 function clearTranscript() {
   const box = document.getElementById('transcriptBox');
-  if (box) { box.textContent = ''; box.classList.remove('has-text'); }
+  if (box) { box.value = ''; box.classList.remove('has-text'); }
 }
 
 // ─── Status bar ───────────────────────────────────────────────────────────────

@@ -9,11 +9,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonResponse(['error' => 'Method not 
 
 $audioFile = $_FILES['audio'] ?? null;
 if (!$audioFile || $audioFile['error'] !== UPLOAD_ERR_OK) {
-    jsonResponse(['error' => 'Ses dosyası alınamadı: ' . ($audioFile['error'] ?? 'yok')], 400);
+    $errCode = $audioFile['error'] ?? -1;
+    $errMsg  = match($errCode) {
+        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Dosya çok büyük',
+        UPLOAD_ERR_NO_FILE  => 'Ses dosyası alınamadı',
+        default             => "Yükleme hatası ({$errCode})",
+    };
+    jsonResponse(['error' => $errMsg], 400);
 }
 
+$language = trim($_POST['language'] ?? 'auto');
 $model    = getSetting('stt_model', 'whisper-large-v3-turbo');
-$language = $_POST['language'] ?? 'auto';
+
+// distil-whisper yalnızca İngilizce destekler — başka dil seçilmişse otomatik geç
+if ($model === 'distil-whisper-large-v3-en' && $language !== 'en' && $language !== 'auto') {
+    $model = 'whisper-large-v3-turbo';
+}
 
 $mime = $audioFile['type'] ?: 'audio/webm';
 $ext  = match(true) {
@@ -31,8 +42,10 @@ rename($tmpPath, $newPath);
 $postData = [
     'file'            => new CURLFile($newPath, $mime, 'audio.' . $ext),
     'model'           => $model,
-    'response_format' => 'json',
+    'response_format' => 'verbose_json', // returns detected_language too
 ];
+
+// Pass language hint only when explicitly set (not 'auto')
 if ($language && $language !== 'auto') {
     $postData['language'] = $language;
 }
@@ -40,5 +53,15 @@ if ($language && $language !== 'auto') {
 $result = groqPost('audio/transcriptions', $postData, true);
 @unlink($newPath);
 
-if (isset($result['error'])) jsonResponse(['error' => $result['error']], 500);
-jsonResponse(['text' => trim($result['text'] ?? '')]);
+if (isset($result['error'])) {
+    jsonResponse(['error' => $result['error']], 500);
+}
+
+$text          = trim($result['text'] ?? '');
+$detectedLang  = $result['language'] ?? $language;
+
+jsonResponse([
+    'text'          => $text,
+    'detected_lang' => $detectedLang,
+    'model_used'    => $model,
+]);

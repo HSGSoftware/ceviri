@@ -24,10 +24,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $appBaseUrl = rtrim($appBaseUrl, '/');
 
-    if (!array_key_exists($sttModel,      STT_MODELS))         $errors[] = 'Geçersiz STT modeli';
-    if (!array_key_exists($transModel,    TRANSLATION_MODELS)) $errors[] = 'Geçersiz çeviri modeli';
-    if (!array_key_exists($minimaxModel,  MINIMAX_MODELS))     $errors[] = 'Geçersiz MiniMax modeli';
+    if (!array_key_exists($sttModel,     STT_MODELS))     $errors[] = 'Geçersiz STT modeli';
+    if (!array_key_exists($minimaxModel, MINIMAX_MODELS)) $errors[] = 'Geçersiz MiniMax modeli';
     if (!in_array($ttsEngine, ['webspeech', 'minimax'], true)) $errors[] = 'Geçersiz TTS motoru';
+    // transModel: herhangi bir string kabul — yeni modeller listede olmayabilir
 
     if (empty($errors)) {
         setSetting('app_base_url',        $appBaseUrl);
@@ -232,11 +232,16 @@ $presetsJson = json_encode(MINIMAX_VOICE_PRESETS, JSON_UNESCAPED_UNICODE);
 
         <div class="field">
           <label class="field-label" for="translation_model">Çeviri Modeli (LLM)</label>
-          <select id="translation_model" name="translation_model" class="field-select">
+          <input type="text" id="translation_model" name="translation_model"
+            class="field-input" list="translation_model_list"
+            value="<?= htmlspecialchars($cur['translation_model']) ?>"
+            placeholder="llama-3.3-70b-versatile">
+          <datalist id="translation_model_list">
             <?php foreach (TRANSLATION_MODELS as $val => $label): ?>
-            <option value="<?= $val ?>" <?= $cur['translation_model'] === $val ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option>
+            <option value="<?= htmlspecialchars($val) ?>"><?= htmlspecialchars($label) ?></option>
             <?php endforeach; ?>
-          </select>
+          </datalist>
+          <p class="field-hint">Listede olmayan model ID'lerini de yazabilirsiniz.</p>
         </div>
       </section>
 

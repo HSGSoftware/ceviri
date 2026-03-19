@@ -118,20 +118,36 @@ $langsJson = json_encode(LANGUAGES, JSON_UNESCAPED_UNICODE);
 
   <!-- Controls -->
   <div class="controls">
-    <div class="transcript-box" id="transcriptBox"></div>
-    <button
-      class="record-btn"
-      id="recordBtn"
-      ontouchstart="startRec(event)"
-      ontouchend="stopRec(event)"
-      ontouchcancel="cancelRec(event)"
-      onmousedown="startRec(event)"
-      onmouseup="stopRec(event)"
-      onmouseleave="cancelRec(event)"
-    >
-      <span class="record-icon" id="recordIcon">🎤</span>
-      <span class="record-label" id="recordLabel">Basılı tut</span>
-    </button>
+
+    <!-- Transcript + editable review area -->
+    <div id="transcriptWrap" class="transcript-wrap">
+      <textarea id="transcriptBox" class="transcript-box" rows="2" readonly
+        placeholder="Konuşmanız burada görünecek…"></textarea>
+      <!-- Confirm / cancel after transcription -->
+      <div id="confirmBtns" class="confirm-btns" style="display:none">
+        <button class="confirm-btn confirm-cancel-btn" id="confirmCancelBtn">✕ İptal</button>
+        <button class="confirm-btn confirm-send-btn"   id="confirmSendBtn">✓ Gönder</button>
+      </div>
+    </div>
+
+    <!-- Record row: cancel (X) + mic button -->
+    <div class="record-row">
+      <button class="cancel-rec-btn" id="cancelRecBtn" style="display:none">✕</button>
+      <button
+        class="record-btn"
+        id="recordBtn"
+        ontouchstart="startRec(event)"
+        ontouchend="stopRec(event)"
+        ontouchcancel="handleCancelRec(event)"
+        onmousedown="startRec(event)"
+        onmouseup="stopRec(event)"
+        onmouseleave="stopRec(event)"
+      >
+        <span class="record-icon" id="recordIcon">🎤</span>
+        <span class="record-label" id="recordLabel">Basılı tut</span>
+      </button>
+    </div>
+
     <div class="tts-toggle">
       <label>
         <input type="checkbox" id="autoPlayToggle" checked onchange="toggleAutoPlay(this.checked)">

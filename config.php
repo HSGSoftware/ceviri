@@ -264,10 +264,17 @@ const STT_MODELS = [
 ];
 
 const TRANSLATION_MODELS = [
-    'llama-3.3-70b-versatile'  => 'Llama 3.3 70B (Önerilen)',
-    'llama-3.1-8b-instant'     => 'Llama 3.1 8B (Hızlı)',
-    'mixtral-8x7b-32768'       => 'Mixtral 8x7B',
-    'gemma2-9b-it'             => 'Gemma 2 9B',
+    'llama-3.3-70b-versatile'          => 'Llama 3.3 70B (Önerilen)',
+    'llama-3.1-70b-versatile'          => 'Llama 3.1 70B',
+    'llama-3.1-8b-instant'             => 'Llama 3.1 8B (Hızlı)',
+    'qwen-qwq-32b'                     => 'Qwen QwQ 32B (Akıl Yürütme)',
+    'qwen-2.5-32b'                     => 'Qwen 2.5 32B',
+    'qwen-2.5-coder-32b'               => 'Qwen 2.5 Coder 32B',
+    'deepseek-r1-distill-qwen-32b'     => 'DeepSeek R1 Qwen 32B',
+    'deepseek-r1-distill-llama-70b'    => 'DeepSeek R1 LLaMA 70B',
+    'mistral-saba-24b'                 => 'Mistral Saba 24B (Çok Dilli)',
+    'mixtral-8x7b-32768'               => 'Mixtral 8x7B',
+    'gemma2-9b-it'                     => 'Gemma 2 9B',
 ];
 
 const MINIMAX_MODELS = [
