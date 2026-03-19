@@ -6,16 +6,23 @@ $saved   = false;
 $errors  = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $apiKey         = trim($_POST['groq_api_key']         ?? '');
-    $minimaxApiKey  = trim($_POST['minimax_api_key']      ?? '');
-    $sttModel       = $_POST['stt_model']                 ?? 'whisper-large-v3-turbo';
-    $transModel     = $_POST['translation_model']         ?? 'llama-3.3-70b-versatile';
-    $ttsEngine      = $_POST['tts_engine']                ?? 'webspeech';
-    $minimaxModel   = $_POST['minimax_tts_model']         ?? 'speech-02-turbo';
-    $minimaxVoice   = trim($_POST['minimax_tts_voice']    ?? 'Turkish_Trustworthyman');
-    $minimaxSpeed   = $_POST['minimax_tts_speed']         ?? '1.0';
-    $minimaxPitch   = $_POST['minimax_tts_pitch']         ?? '0';
-    $minimaxVol     = $_POST['minimax_tts_vol']           ?? '1.0';
+    $appBaseUrl     = trim($_POST['app_base_url']          ?? '');
+    $apiKey         = trim($_POST['groq_api_key']          ?? '');
+    $minimaxApiKey  = trim($_POST['minimax_api_key']       ?? '');
+    $sttModel       = $_POST['stt_model']                  ?? 'whisper-large-v3-turbo';
+    $transModel     = $_POST['translation_model']          ?? 'llama-3.3-70b-versatile';
+    $ttsEngine      = $_POST['tts_engine']                 ?? 'webspeech';
+    $minimaxModel   = $_POST['minimax_tts_model']          ?? 'speech-02-turbo';
+    $minimaxVoice   = trim($_POST['minimax_tts_voice']     ?? 'Turkish_Trustworthyman');
+    $minimaxSpeed   = $_POST['minimax_tts_speed']          ?? '1.0';
+    $minimaxPitch   = $_POST['minimax_tts_pitch']          ?? '0';
+    $minimaxVol     = $_POST['minimax_tts_vol']            ?? '1.0';
+
+    // Normalize base URL
+    if ($appBaseUrl && !preg_match('#^https?://#', $appBaseUrl)) {
+        $appBaseUrl = 'https://' . $appBaseUrl;
+    }
+    $appBaseUrl = rtrim($appBaseUrl, '/');
 
     if (!array_key_exists($sttModel,      STT_MODELS))         $errors[] = 'Geçersiz STT modeli';
     if (!array_key_exists($transModel,    TRANSLATION_MODELS)) $errors[] = 'Geçersiz çeviri modeli';
@@ -23,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array($ttsEngine, ['webspeech', 'minimax'], true)) $errors[] = 'Geçersiz TTS motoru';
 
     if (empty($errors)) {
+        setSetting('app_base_url',        $appBaseUrl);
         setSetting('groq_api_key',        $apiKey);
         setSetting('minimax_api_key',     $minimaxApiKey);
         setSetting('stt_model',           $sttModel);
@@ -38,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $cur = [
+    'app_base_url'       => getSetting('app_base_url'),
     'groq_api_key'       => getSetting('groq_api_key'),
     'minimax_api_key'    => getSetting('minimax_api_key'),
     'stt_model'          => getSetting('stt_model',          'whisper-large-v3-turbo'),
@@ -50,8 +59,10 @@ $cur = [
     'minimax_tts_vol'    => getSetting('minimax_tts_vol',    '1.0'),
 ];
 
+$effectiveBaseURL = getBaseURL();
+
 $localIP = getLocalIP();
-$port    = $_SERVER['SERVER_PORT'] ?? 80;
+$port        = $_SERVER['SERVER_PORT'] ?? 80;
 $presetsJson = json_encode(MINIMAX_VOICE_PRESETS, JSON_UNESCAPED_UNICODE);
 ?>
 <!DOCTYPE html>
@@ -95,6 +106,21 @@ $presetsJson = json_encode(MINIMAX_VOICE_PRESETS, JSON_UNESCAPED_UNICODE);
   padding:6px 10px; border-radius:var(--radius-sm); font-size:13px; font-family:inherit;
 }
 #voiceLoadStatus { font-size:12px; color:var(--text-muted); margin-top:4px; display:none; }
+.url-status { display:flex; align-items:center; gap:8px; padding:10px 12px;
+  border-radius:var(--radius-sm); font-size:13px; margin-top:6px; }
+.url-status.active  { background:rgba(34,197,94,.1);  border:1px solid rgba(34,197,94,.3);  color:var(--success); }
+.url-status.default { background:rgba(148,163,184,.08); border:1px solid var(--border); color:var(--text-muted); }
+.cf-steps { list-style:none; display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+.cf-steps li { display:flex; gap:10px; font-size:13px; line-height:1.5; }
+.cf-steps li .step-num { 
+  width:22px; height:22px; border-radius:50%; background:var(--primary); 
+  color:#fff; display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:600; flex-shrink:0; margin-top:1px;
+}
+.cf-steps code { 
+  background:var(--surface2); padding:2px 6px; border-radius:4px; 
+  font-size:12px; font-family:monospace; color:var(--accent);
+}
 </style>
 </head>
 <body class="settings-page">
@@ -116,16 +142,68 @@ $presetsJson = json_encode(MINIMAX_VOICE_PRESETS, JSON_UNESCAPED_UNICODE);
 
     <form method="POST" class="settings-form" id="settingsForm">
 
-      <!-- Network info -->
+      <!-- ── Cloudflare / Bağlantı ──────────────────────────────────────── -->
       <section class="settings-section">
-        <h2 class="section-title">Ağ Bilgisi</h2>
-        <div class="info-row">
-          <span class="info-label">Yerel IP</span>
-          <span class="info-value mono"><?= htmlspecialchars($localIP) ?></span>
+        <h2 class="section-title">🌐 Bağlantı & Paylaşım URL'i</h2>
+
+        <div class="field">
+          <label class="field-label" for="app_base_url">Site URL <small style="color:var(--text-muted);font-weight:400">(Cloudflare Tunnel, ngrok vb.)</small></label>
+          <input type="url" id="app_base_url" name="app_base_url"
+            class="field-input"
+            value="<?= htmlspecialchars($cur['app_base_url']) ?>"
+            placeholder="https://xxxx.trycloudflare.com"
+            autocomplete="off"
+            oninput="updateUrlPreview(this.value)">
+          <p class="field-hint">Boş bırakılırsa yerel IP kullanılır. Cloudflare Tunnel URL'ini buraya girin.</p>
+
+          <?php if ($cur['app_base_url']): ?>
+          <div class="url-status active">
+            ✓ Aktif: <strong><?= htmlspecialchars($cur['app_base_url']) ?></strong>
+          </div>
+          <?php else: ?>
+          <div class="url-status default">
+            Şu an: <span><?= htmlspecialchars($effectiveBaseURL) ?></span>
+          </div>
+          <?php endif; ?>
         </div>
-        <div class="info-row">
-          <span class="info-label">Port</span>
-          <span class="info-value mono"><?= htmlspecialchars((string)$port) ?></span>
+
+        <!-- Cloudflare Tunnel kurulum rehberi (Termux) -->
+        <div class="field">
+          <label class="field-label">Cloudflare Tunnel kurulumu (Termux)</label>
+          <ul class="cf-steps">
+            <li>
+              <span class="step-num">1</span>
+              <span>Termux'ta cloudflared yükle:<br>
+                <code>pkg install cloudflared</code>
+              </span>
+            </li>
+            <li>
+              <span class="step-num">2</span>
+              <span>PHP sunucusunu başlat (ayrı sekme):<br>
+                <code>php -S 0.0.0.0:8080 -t /path/to/app</code>
+              </span>
+            </li>
+            <li>
+              <span class="step-num">3</span>
+              <span>Tunnel başlat (ayrı sekme):<br>
+                <code>cloudflared tunnel --url http://localhost:8080</code>
+              </span>
+            </li>
+            <li>
+              <span class="step-num">4</span>
+              <span>Terminalde çıkan <code>https://xxxx.trycloudflare.com</code> URL'ini yukarıdaki alana yapıştır ve kaydet.</span>
+            </li>
+            <li>
+              <span class="step-num">5</span>
+              <span>Sayfayı HTTPS URL üzerinden aç → mikrofon izni çalışır ✓</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Ağ bilgisi -->
+        <div class="info-row" style="margin-top:4px">
+          <span class="info-label">Yerel IP</span>
+          <span class="info-value mono"><?= htmlspecialchars($localIP) ?>:<?= htmlspecialchars((string)$port) ?></span>
         </div>
       </section>
 
@@ -320,6 +398,19 @@ function toggleVis(id) {
 
 function onEngineChange(val) {
   document.getElementById('minimaxSection').style.display = val === 'minimax' ? '' : 'none';
+}
+
+function updateUrlPreview(val) {
+  const hint = document.querySelector('.url-status');
+  if (!hint) return;
+  const trimmed = val.trim().replace(/\/+$/, '');
+  if (trimmed) {
+    hint.className = 'url-status active';
+    hint.innerHTML = '✓ Kaydedince aktif: <strong>' + trimmed + '</strong>';
+  } else {
+    hint.className = 'url-status default';
+    hint.innerHTML = 'Boş — yerel IP kullanılır';
+  }
 }
 
 function showPresets(lang) {

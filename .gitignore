@@ -1,1 +1,5 @@
 db/*.sqlite
+ssl/*.pem
+ssl/*.cer
+ssl/*.cnf
+ssl/

@@ -114,10 +114,25 @@ function getLocalIP(): string {
 }
 
 function getBaseURL(): string {
+    // 1. Manuel ayarlanan URL (Cloudflare Tunnel vb.) her şeyin önünde gelir
+    $custom = getSetting('app_base_url');
+    if (!empty($custom)) {
+        return rtrim($custom, '/');
+    }
+
+    // 2. stunnel/nginx HTTPS proxy aktifse
+    $httpsPort = getenv('LOCALTALK_HTTPS_PORT');
+    $httpsOk   = getenv('LOCALTALK_HTTPS_OK');
+    if ($httpsPort && $httpsOk === 'true') {
+        $p = (int)$httpsPort;
+        $ip = getLocalIP();
+        return ($p === 443) ? "https://{$ip}" : "https://{$ip}:{$p}";
+    }
+
+    // 3. Düz HTTP (lokal ağ)
     $ip   = getLocalIP();
     $port = (int)($_SERVER['SERVER_PORT'] ?? 80);
-    $path = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/');
-    return ($port === 80) ? "http://{$ip}{$path}" : "http://{$ip}:{$port}{$path}";
+    return ($port === 80) ? "http://{$ip}" : "http://{$ip}:{$port}";
 }
 
 function generateId(): string {
