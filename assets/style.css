@@ -28,6 +28,21 @@ body {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
+.top-nav {
+  text-align: end;
+  margin-bottom: 0.5rem;
+}
+
+.top-nav a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.top-nav a:hover {
+  text-decoration: underline;
+}
+
 header {
   text-align: center;
   margin-bottom: 1rem;
@@ -214,4 +229,23 @@ footer.hint-footer {
 [dir="rtl"] .panel h2,
 [dir="rtl"] label {
   text-align: right;
+}
+
+.settings-form input[type="password"],
+.settings-form input[type="text"] {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #0c1118;
+  color: var(--text);
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.form-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0 0 1rem;
+  line-height: 1.4;
 }

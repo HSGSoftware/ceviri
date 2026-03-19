@@ -18,18 +18,14 @@ $host = $_SERVER['HTTP_HOST'] ?? '';
 $port = (int) ($_SERVER['SERVER_PORT'] ?? 80);
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-$proto = $isHttps ? 'https' : 'http';
 
 if ($host === '') {
     $host = getLanIp() . ($port && !in_array($port, [80, 443], true) ? ':' . $port : '');
 }
 
 $pathBase = $base === '' ? '/' : $base . '/';
-$shareUrl = $proto . '://' . $host . $pathBase;
-
-$lanIp = getLanIp();
-$portSuffix = $port && !in_array($port, [80, 443], true) ? ':' . $port : '';
-$lanUrl = 'http://' . $lanIp . $portSuffix . $pathBase;
+$shareInfo = buildShareUrl($host, $port, $isHttps, $pathBase);
+$shareUrl = $shareInfo['url'];
 
 $hasKey = groqApiKey() !== '';
 
@@ -73,6 +69,9 @@ $rtl = $uiLang === 'ar';
 </head>
 <body>
   <header>
+    <nav class="top-nav">
+      <a href="<?= htmlspecialchars(($base === '' ? '' : $base) . '/settings.php', ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($I['nav_settings'], ENT_QUOTES, 'UTF-8') ?></a>
+    </nav>
     <h1><?= htmlspecialchars($I['title'], ENT_QUOTES, 'UTF-8') ?></h1>
     <p><?= htmlspecialchars($I['subtitle'], ENT_QUOTES, 'UTF-8') ?></p>
   </header>
@@ -86,12 +85,6 @@ $rtl = $uiLang === 'ar';
   <div class="share-box">
     <?= htmlspecialchars($I['share_hint'], ENT_QUOTES, 'UTF-8') ?>
     <code id="share-link"><?= htmlspecialchars($shareUrl, ENT_QUOTES, 'UTF-8') ?></code>
-    <?php
-    $h = strtolower($host);
-    if (str_starts_with($h, '127.') || $h === 'localhost' || $h === '::1'):
-    ?>
-    <div style="margin-top:0.6rem;">LAN: <code style="word-break:break-all;"><?= htmlspecialchars($lanUrl, ENT_QUOTES, 'UTF-8') ?></code></div>
-    <?php endif; ?>
     <button type="button" class="copy-btn" id="copy-url"><?= htmlspecialchars($I['copy'], ENT_QUOTES, 'UTF-8') ?></button>
   </div>
 

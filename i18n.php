@@ -28,6 +28,17 @@ function i18n_strings(): array
             'error_network' => 'Ağ hatası.',
             'error_api' => 'API hatası.',
             'auto_voice' => 'Çeviri sesi otomatik oynatılır',
+            'nav_settings' => 'Ayarlar',
+            'nav_home' => 'Ana sayfa',
+            'settings_title' => 'Ayarlar',
+            'settings_intro' => 'Groq API anahtarını buraya girin. Sunucu bu değeri yerel olarak saklar.',
+            'api_key_label' => 'Groq API anahtarı',
+            'api_key_placeholder' => 'gsk_…',
+            'save' => 'Kaydet',
+            'settings_saved' => 'Kaydedildi.',
+            'settings_env_active' => 'Ortam değişkeni GROQ_API_KEY tanımlı; şu an o anahtar kullanılıyor. Dosyaya kayıt yine de yapılabilir (.env önceliklidir).',
+            'settings_file_active' => 'Kayıtlı bir anahtar var. Değiştirmek için yenisini yazın; silmek için alanı boş bırakıp kaydedin.',
+            'settings_clear_hint' => 'Alanı boş bırakıp kaydederek dosyadaki anahtarı silebilirsiniz.',
         ],
         'en' => [
             'title' => 'Local Voice Translation',
@@ -49,6 +60,17 @@ function i18n_strings(): array
             'error_network' => 'Network error.',
             'error_api' => 'API error.',
             'auto_voice' => 'Translation plays automatically',
+            'nav_settings' => 'Settings',
+            'nav_home' => 'Home',
+            'settings_title' => 'Settings',
+            'settings_intro' => 'Enter your Groq API key. It is stored locally on this machine.',
+            'api_key_label' => 'Groq API key',
+            'api_key_placeholder' => 'gsk_…',
+            'save' => 'Save',
+            'settings_saved' => 'Saved.',
+            'settings_env_active' => 'Environment variable GROQ_API_KEY is set; that value takes precedence. You can still save to file (.env wins).',
+            'settings_file_active' => 'A key is saved. Enter a new one to replace it; leave blank and save to remove.',
+            'settings_clear_hint' => 'Leave the field empty and save to delete the stored key.',
         ],
         'de' => [
             'title' => 'Lokale Sprachübersetzung',
@@ -206,8 +228,7 @@ function i18n_strings(): array
  */
 function i18n_for_lang(string $lang, array $all): array
 {
-    if (isset($all[$lang])) {
-        return $all[$lang];
-    }
-    return $all['en'];
+    $en = $all['en'] ?? [];
+    $cur = isset($all[$lang]) && is_array($all[$lang]) ? $all[$lang] : [];
+    return array_merge($en, $cur);
 }
