@@ -39,6 +39,7 @@ function i18n_strings(): array
             'settings_env_active' => 'Ortam değişkeni GROQ_API_KEY tanımlı; şu an o anahtar kullanılıyor. Dosyaya kayıt yine de yapılabilir (.env önceliklidir).',
             'settings_file_active' => 'Kayıtlı bir anahtar var. Değiştirmek için yenisini yazın; silmek için alanı boş bırakıp kaydedin.',
             'settings_clear_hint' => 'Alanı boş bırakıp kaydederek dosyadaki anahtarı silebilirsiniz.',
+            'client_ip_hint' => 'Şu an bağlandığınız cihazın yerel adresi (ör. telefon):',
         ],
         'en' => [
             'title' => 'Local Voice Translation',
@@ -71,6 +72,7 @@ function i18n_strings(): array
             'settings_env_active' => 'Environment variable GROQ_API_KEY is set; that value takes precedence. You can still save to file (.env wins).',
             'settings_file_active' => 'A key is saved. Enter a new one to replace it; leave blank and save to remove.',
             'settings_clear_hint' => 'Leave the field empty and save to delete the stored key.',
+            'client_ip_hint' => 'Local address of the device you are using now (e.g. phone):',
         ],
         'de' => [
             'title' => 'Lokale Sprachübersetzung',

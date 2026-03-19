@@ -86,6 +86,12 @@ $rtl = $uiLang === 'ar';
     <?= htmlspecialchars($I['share_hint'], ENT_QUOTES, 'UTF-8') ?>
     <code id="share-link"><?= htmlspecialchars($shareUrl, ENT_QUOTES, 'UTF-8') ?></code>
     <button type="button" class="copy-btn" id="copy-url"><?= htmlspecialchars($I['copy'], ENT_QUOTES, 'UTF-8') ?></button>
+    <?php
+    $clientIp = clientLanIpForDisplay();
+    if ($clientIp !== null):
+    ?>
+    <p class="client-ip-line"><?= htmlspecialchars($I['client_ip_hint'], ENT_QUOTES, 'UTF-8') ?> <code><?= htmlspecialchars($clientIp, ENT_QUOTES, 'UTF-8') ?></code></p>
+    <?php endif; ?>
   </div>
 
   <div class="grid">

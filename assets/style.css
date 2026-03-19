@@ -249,3 +249,15 @@ footer.hint-footer {
   margin: 0 0 1rem;
   line-height: 1.4;
 }
+
+.client-ip-line {
+  margin: 0.65rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.client-ip-line code {
+  color: var(--text);
+  font-size: 0.78rem;
+}

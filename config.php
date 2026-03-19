@@ -187,6 +187,21 @@ function getLanIp(): string
     return $candidates[0];
 }
 
+function clientLanIpForDisplay(): ?string
+{
+    $remote = $_SERVER['REMOTE_ADDR'] ?? '';
+    if (!is_string($remote) || $remote === '') {
+        return null;
+    }
+    if (filter_var($remote, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        if (str_starts_with($remote, '127.')) {
+            return null;
+        }
+        return $remote;
+    }
+    return null;
+}
+
 function jsonResponse(array $data, int $code = 200): void
 {
     http_response_code($code);
