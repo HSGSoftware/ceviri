@@ -185,15 +185,25 @@ function toggleAutoPlay(val) {
   localStorage.setItem('autoPlay', String(val));
 }
 
+// ─── Safe JSON fetch helper ───────────────────────────────────────────────────
+async function fetchJSON(url, options = {}) {
+  const res = await fetch(url, options);
+  const ct  = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status}: ${text.replace(/<[^>]+>/g, '').trim().slice(0, 120)}`);
+  }
+  const data = await res.json();
+  return data;
+}
+
 // ─── History (avoid replaying on load) ───────────────────────────────────────
 async function loadHistory() {
   try {
-    const res  = await fetch(`api/messages.php?session_id=${SESSION_ID}&since=0`);
-    const data = await res.json();
+    const data = await fetchJSON(`api/messages.php?session_id=${SESSION_ID}&since=0`);
     if (data.messages && data.messages.length) {
-      const msgs = data.messages;
-      msgs.forEach(m => renderMessage(m, false)); // render without playing
-      lastMsgId = msgs[msgs.length - 1].id;
+      data.messages.forEach(m => renderMessage(m, false));
+      lastMsgId = data.messages[data.messages.length - 1].id;
       scrollToBottom();
     }
   } catch (_) {}
@@ -207,10 +217,8 @@ function startPolling() {
 
 async function pollMessages() {
   try {
-    const res  = await fetch(`api/messages.php?session_id=${SESSION_ID}&since=${lastMsgId}`);
-    const data = await res.json();
+    const data = await fetchJSON(`api/messages.php?session_id=${SESSION_ID}&since=${lastMsgId}`);
     if (!data.messages || !data.messages.length) return;
-
     data.messages.forEach(m => {
       renderMessage(m, true);
       lastMsgId = Math.max(lastMsgId, m.id);
@@ -378,8 +386,7 @@ async function processAudio() {
 
   let transcribed = '';
   try {
-    const res  = await fetch('api/transcribe.php', { method: 'POST', body: formData });
-    const data = await res.json();
+    const data = await fetchJSON('api/transcribe.php', { method: 'POST', body: formData });
     if (data.error) throw new Error(data.error);
     transcribed = data.text?.trim() || '';
   } catch (err) {
@@ -394,7 +401,7 @@ async function processAudio() {
   // Step 2: Translate
   setStatus(`<span class="spinner"></span>${t('translating')}`);
   try {
-    const res  = await fetch('api/translate.php', {
+    const data = await fetchJSON('api/translate.php', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -405,7 +412,6 @@ async function processAudio() {
         speaker:     ROLE,
       }),
     });
-    const data = await res.json();
     if (data.error) throw new Error(data.error);
   } catch (err) {
     setStatus('✗ ' + (err.message || t('errorGeneral')), 'error');
@@ -468,8 +474,7 @@ async function drainQueue() {
 
 async function loadServerSettings() {
   try {
-    const res  = await fetch('api/settings.php');
-    const data = await res.json();
+    const data = await fetchJSON('api/settings.php');
     if (data.tts_engine) localStorage.setItem('tts_engine', data.tts_engine);
   } catch (_) {}
 }
@@ -573,7 +578,7 @@ async function changeOtherLang(val) {
 
 async function patchSession(payload) {
   try {
-    await fetch('api/session.php', {
+    await fetchJSON('api/session.php', {
       method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: SESSION_ID, ...payload }),

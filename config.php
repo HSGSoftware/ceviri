@@ -1,6 +1,27 @@
 <?php
 declare(strict_types=1);
 
+// Prevent PHP errors/warnings from corrupting JSON responses
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+error_reporting(E_ALL);
+
+set_error_handler(function(int $errno, string $errstr, string $errfile, int $errline): bool {
+    if (!(error_reporting() & $errno)) return false;
+    error_log("[{$errno}] {$errstr} in {$errfile}:{$errline}");
+    return true;
+});
+
+set_exception_handler(function(\Throwable $e): void {
+    error_log($e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    exit;
+});
+
 if (!class_exists('SQLite3')) {
     die('PHP SQLite3 extension is required.');
 }
