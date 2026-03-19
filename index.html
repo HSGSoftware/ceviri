@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ceviri | Web Translation App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero card">
+        <div>
+          <p class="eyebrow">Fast, simple, and browser-based</p>
+          <h1>Translate text in seconds.</h1>
+          <p class="hero-copy">
+            Ceviri is a lightweight translation app with language swap, quick actions,
+            saved history, and a graceful offline fallback.
+          </p>
+        </div>
+        <div class="hero-badges">
+          <span>120+ language pairs</span>
+          <span>Copy &amp; speech tools</span>
+          <span>Local history</span>
+        </div>
+      </section>
+
+      <section class="translator card">
+        <div class="toolbar">
+          <div class="language-group">
+            <label>
+              <span>From</span>
+              <select id="sourceLanguage"></select>
+            </label>
+            <button id="swapLanguages" class="icon-button" type="button" aria-label="Swap languages">
+              ⇄
+            </button>
+            <label>
+              <span>To</span>
+              <select id="targetLanguage"></select>
+            </label>
+          </div>
+          <button id="translateButton" class="primary-button" type="button">Translate</button>
+        </div>
+
+        <div class="panes">
+          <article class="pane">
+            <div class="pane-header">
+              <h2>Source</h2>
+              <span id="sourceMeta">0 characters</span>
+            </div>
+            <textarea
+              id="sourceText"
+              placeholder="Type or paste text here..."
+              maxlength="1000"
+            ></textarea>
+            <div class="pane-actions">
+              <button id="clearSource" type="button">Clear</button>
+              <button id="speakSource" type="button">Speak</button>
+              <button id="pasteSource" type="button">Paste</button>
+            </div>
+          </article>
+
+          <article class="pane accent-pane">
+            <div class="pane-header">
+              <h2>Translation</h2>
+              <span id="targetMeta">Ready</span>
+            </div>
+            <textarea
+              id="translatedText"
+              placeholder="Your translation will appear here..."
+              readonly
+            ></textarea>
+            <div class="pane-actions">
+              <button id="copyTranslation" type="button">Copy</button>
+              <button id="speakTranslation" type="button">Speak</button>
+              <button id="downloadTranslation" type="button">Download</button>
+            </div>
+          </article>
+        </div>
+
+        <p id="statusMessage" class="status" role="status" aria-live="polite">
+          Enter text and click translate to begin.
+        </p>
+      </section>
+
+      <section class="bottom-grid">
+        <article class="history card">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Recent translations</p>
+              <h2>History</h2>
+            </div>
+            <button id="clearHistory" type="button">Clear history</button>
+          </div>
+          <ul id="historyList" class="history-list"></ul>
+        </article>
+
+        <article class="tips card">
+          <p class="eyebrow">How it works</p>
+          <h2>Helpful details</h2>
+          <ul>
+            <li>Translations are fetched from the MyMemory translation API.</li>
+            <li>If the network request fails, Ceviri offers a small built-in phrase fallback.</li>
+            <li>Your recent translations are stored locally in your browser.</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+
+    <template id="historyItemTemplate">
+      <li class="history-item">
+        <button class="history-entry" type="button">
+          <span class="history-languages"></span>
+          <strong class="history-source"></strong>
+          <span class="history-translation"></span>
+        </button>
+      </li>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
