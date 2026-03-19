@@ -132,16 +132,17 @@ let pendingQueue  = [];
 let isPlaying     = false;
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   applyI18n();
   loadAutoPlayPref();
-  loadServerSettings();
+  await loadServerSettings();   // TTS engine localStorage'a yazılmadan polling/play başlamasın
   startPolling();
   loadHistory();
 
-  // Unlock audio on first interaction
-  document.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
-  document.addEventListener('mousedown',  unlockAudio, { once: true });
+  // Unlock audio on first interaction (any gesture type)
+  ['touchstart', 'mousedown', 'click', 'keydown'].forEach(evt =>
+    document.addEventListener(evt, unlockAudio, { once: true, passive: true })
+  );
 });
 
 function applyI18n() {
@@ -232,31 +233,36 @@ function renderMessage(msg, withTTS) {
   const isOwn = msg.speaker === ROLE;
   hideEmptyState();
 
+  const ttsLang = isOwn ? otherLang : myLang;
+
   const div = document.createElement('div');
   div.className = `msg ${isOwn ? 'own' : 'other'}`;
   div.dataset.id = msg.id;
 
-  const time = new Date(msg.created_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const displayOriginal    = escHtml(msg.original_text);
-  const displayTranslated  = escHtml(msg.translated_text);
+  const time = new Date(msg.created_at * 1000)
+    .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const ttsLang = isOwn ? otherLang : myLang;
-  const ttsText = escAttr(msg.translated_text);
-
+  // Build bubble safely — NO inline JS in attributes (escaping hell)
   div.innerHTML = `
     <div class="msg-bubble">
-      <div class="msg-original">${displayOriginal}</div>
-      <div class="msg-translated">${displayTranslated}</div>
+      <div class="msg-original">${escHtml(msg.original_text)}</div>
+      <div class="msg-translated">${escHtml(msg.translated_text)}</div>
     </div>
     <div class="msg-footer">
       <span class="msg-time">${time}</span>
-      <button class="play-btn" onclick="playTTS(${JSON.stringify(msg.translated_text)}, '${escAttr(ttsLang)}')" title="Seslendir">🔊</button>
+      <button class="play-btn" title="Seslendir">🔊</button>
     </div>
   `;
 
+  // Attach handler via closure — text/lang never touch HTML attributes
+  div.querySelector('.play-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    unlockAudio();
+    playTTS(msg.translated_text, ttsLang);
+  });
+
   document.getElementById('conversation').appendChild(div);
 
-  // Auto-play TTS for incoming messages
   if (withTTS && autoPlay && !isOwn) {
     queueTTS(msg.translated_text, ttsLang);
   }
@@ -484,7 +490,12 @@ async function drainQueue() {
 async function loadServerSettings() {
   try {
     const data = await fetchJSON('api/settings.php');
-    if (data.tts_engine) localStorage.setItem('tts_engine', data.tts_engine);
+    if (data.tts_engine) {
+      localStorage.setItem('tts_engine',        data.tts_engine);
+    }
+    if (data.minimax_tts_voice) {
+      localStorage.setItem('minimax_tts_voice', data.minimax_tts_voice);
+    }
   } catch (_) {}
 }
 
@@ -494,6 +505,11 @@ async function playTTS(text, lang) {
   if (engine === 'minimax') {
     await playMiniMaxTTS(text, lang);
   } else {
+    // Web Speech API
+    if (!window.speechSynthesis) {
+      setStatus('🔇 Tarayıcı TTS desteklemiyor', 'error');
+      return;
+    }
     await playWebSpeech(text, lang);
   }
 }
@@ -519,37 +535,78 @@ function langBCP47(code) {
   return map[code] || code;
 }
 
-// Uses Web Audio API → autoplay çalışır (ilk gesture sonrası AudioContext resume edilir)
 async function playMiniMaxTTS(text, lang) {
+  // --- 1. Fetch audio from PHP ---
+  let arrayBuffer;
   try {
     const res = await fetch('api/tts.php', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, lang }),
     });
-
     if (!res.ok) {
       const ct = res.headers.get('content-type') || '';
+      let msg = 'HTTP ' + res.status;
       if (ct.includes('json')) {
-        const err = await res.json();
-        setStatus('TTS: ' + (err.error || 'hata'), 'error');
+        try { const e = await res.json(); msg = e.error || msg; } catch (_) {}
       }
+      setStatus('🔇 TTS: ' + msg, 'error');
       return;
     }
+    arrayBuffer = await res.arrayBuffer();
+    if (!arrayBuffer.byteLength) { setStatus('🔇 TTS: boş yanıt', 'error'); return; }
+  } catch (fetchErr) {
+    setStatus('🔇 TTS bağlantı hatası', 'error');
+    return;
+  }
 
-    const arrayBuffer = await res.arrayBuffer();
-    const ctx = getAudioCtx();
-    await ctx.resume();
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-    return new Promise(resolve => {
-      const source   = ctx.createBufferSource();
-      source.buffer  = audioBuffer;
-      source.connect(ctx.destination);
-      source.onended = resolve;
-      source.start(0);
+  // --- 2. Web Audio API (best for auto-play: gesture-independent after resume) ---
+  const ctx = getAudioCtx();
+  let webAudioOk = false;
+  if (ctx) {
+    try {
+      await ctx.resume();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+      await new Promise((resolve, reject) => {
+        const source   = ctx.createBufferSource();
+        source.buffer  = audioBuffer;
+        source.connect(ctx.destination);
+        source.onended = resolve;
+        source.onerror = reject;
+        source.start(0);
+      });
+      webAudioOk = true;
+    } catch (webAudioErr) {
+      console.warn('Web Audio failed, trying HTML Audio:', webAudioErr.message || webAudioErr);
+    }
+  }
+  if (webAudioOk) return;
+
+  // --- 3. HTML Audio fallback (works for direct user clicks) ---
+  try {
+    const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+    const url  = URL.createObjectURL(blob);
+    await new Promise((resolve) => {
+      const audio   = new Audio(url);
+      audio.oncanplaythrough = () => {
+        audio.play().catch(playErr => {
+          console.warn('audio.play() blocked:', playErr.message);
+          setStatus('🔇 Ses oynatılamadı: tarayıcı izni gerekli', 'error');
+          URL.revokeObjectURL(url);
+          resolve();
+        });
+      };
+      audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+      audio.onerror = (e) => {
+        console.error('Audio load error:', e);
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+      audio.src = url;
+      audio.load();
     });
   } catch (err) {
-    console.error('MiniMax TTS:', err);
+    console.error('TTS HTML Audio:', err);
   }
 }
 
@@ -557,13 +614,15 @@ async function playMiniMaxTTS(text, lang) {
 function unlockAudio() {
   if (audioUnlocked) return;
   audioUnlocked = true;
-  // Resume shared AudioContext on first user gesture → unlocks autoplay on mobile
-  getAudioCtx().resume();
+  // Resume shared AudioContext during user gesture → subsequent auto-plays work
+  try { getAudioCtx().resume(); } catch (_) {}
   // Warm up Web Speech API
-  if (window.speechSynthesis) {
-    const u = new SpeechSynthesisUtterance('');
-    window.speechSynthesis.speak(u);
-  }
+  try {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+    }
+  } catch (_) {}
 }
 
 // ─── Share / QR ───────────────────────────────────────────────────────────────
