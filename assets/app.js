@@ -458,6 +458,15 @@ function setStatus(html, type = '') {
   }
 }
 
+// ─── AudioContext (shared, survives across plays) ─────────────────────────────
+let sharedAudioCtx = null;
+function getAudioCtx() {
+  if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+    sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return sharedAudioCtx;
+}
+
 // ─── TTS ──────────────────────────────────────────────────────────────────────
 function queueTTS(text, lang) {
   pendingQueue.push({ text, lang });
@@ -482,9 +491,8 @@ async function loadServerSettings() {
 async function playTTS(text, lang) {
   if (!text) return;
   const engine = localStorage.getItem('tts_engine') || 'webspeech';
-
-  if (engine === 'groq') {
-    await playGroqTTS(text, lang);
+  if (engine === 'minimax') {
+    await playMiniMaxTTS(text, lang);
   } else {
     await playWebSpeech(text, lang);
   }
@@ -511,34 +519,46 @@ function langBCP47(code) {
   return map[code] || code;
 }
 
-async function playGroqTTS(text, lang) {
+// Uses Web Audio API → autoplay çalışır (ilk gesture sonrası AudioContext resume edilir)
+async function playMiniMaxTTS(text, lang) {
   try {
     const res = await fetch('api/tts.php', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, lang }),
     });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    await new Promise((resolve, reject) => {
-      const audio    = new Audio(url);
-      audio.onended  = resolve;
-      audio.onerror  = resolve;
-      audio.play().catch(resolve);
+
+    if (!res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('json')) {
+        const err = await res.json();
+        setStatus('TTS: ' + (err.error || 'hata'), 'error');
+      }
+      return;
+    }
+
+    const arrayBuffer = await res.arrayBuffer();
+    const ctx = getAudioCtx();
+    await ctx.resume();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    return new Promise(resolve => {
+      const source   = ctx.createBufferSource();
+      source.buffer  = audioBuffer;
+      source.connect(ctx.destination);
+      source.onended = resolve;
+      source.start(0);
     });
-    URL.revokeObjectURL(url);
-  } catch (_) {}
+  } catch (err) {
+    console.error('MiniMax TTS:', err);
+  }
 }
 
 // ─── Audio unlock ──────────────────────────────────────────────────────────────
 function unlockAudio() {
   if (audioUnlocked) return;
   audioUnlocked = true;
-  if (window.AudioContext || window.webkitAudioContext) {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    ctx.resume().then(() => ctx.close());
-  }
+  // Resume shared AudioContext on first user gesture → unlocks autoplay on mobile
+  getAudioCtx().resume();
   // Warm up Web Speech API
   if (window.speechSynthesis) {
     const u = new SpeechSynthesisUtterance('');

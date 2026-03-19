@@ -163,29 +163,61 @@ function groqPost(string $endpoint, array $data, bool $multipart = false): array
     return $decoded;
 }
 
-function groqTTS(string $text, string $model, string $voice): string|false {
-    $apiKey = getSetting('groq_api_key');
-    if (empty($apiKey)) return false;
-    $ch = curl_init('https://api.groq.com/openai/v1/audio/speech');
+// Returns MP3 binary data on success, or ['error' => '...'] on failure
+function minimaxTTS(string $text, string $model, string $voiceId, float $speed, float $vol, int $pitch): string|array {
+    $apiKey = getSetting('minimax_api_key');
+    if (empty($apiKey)) return ['error' => 'MiniMax API anahtarı ayarlanmamış'];
+
+    $ch = curl_init('https://api.minimax.io/v1/t2a_v2');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
-        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_TIMEOUT        => 30,
         CURLOPT_HTTPHEADER     => [
             'Authorization: Bearer ' . $apiKey,
             'Content-Type: application/json',
         ],
         CURLOPT_POSTFIELDS => json_encode([
-            'model'           => $model,
-            'input'           => $text,
-            'voice'           => $voice,
-            'response_format' => 'mp3',
+            'model'  => $model,
+            'text'   => $text,
+            'stream' => false,
+            'voice_setting' => [
+                'voice_id' => $voiceId,
+                'speed'    => $speed,
+                'vol'      => $vol,
+                'pitch'    => $pitch,
+            ],
+            'audio_setting' => [
+                'sample_rate' => 32000,
+                'bitrate'     => 128000,
+                'format'      => 'mp3',
+                'channel'     => 1,
+            ],
         ]),
     ]);
+
     $response = curl_exec($ch);
     $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr  = curl_error($ch);
     curl_close($ch);
-    return ($code === 200) ? $response : false;
+
+    if ($curlErr)  return ['error' => 'cURL: ' . $curlErr];
+    if (!$response) return ['error' => 'Boş yanıt'];
+
+    $decoded = json_decode($response, true) ?? [];
+
+    // Check for API-level error
+    $baseCode = $decoded['base_resp']['status_code'] ?? 0;
+    if ($baseCode !== 0) {
+        return ['error' => $decoded['base_resp']['status_msg'] ?? "API hata kodu {$baseCode}"];
+    }
+
+    $hexAudio = $decoded['data']['audio'] ?? '';
+    if (!$hexAudio) {
+        return ['error' => "Ses verisi boş (HTTP {$code})"];
+    }
+
+    return hex2bin($hexAudio);
 }
 
 const LANGUAGES = [
@@ -223,19 +255,66 @@ const TRANSLATION_MODELS = [
     'gemma2-9b-it'             => 'Gemma 2 9B',
 ];
 
-const TTS_VOICES = [
-    'playai-tts' => [
-        'Fritz-PlayAI'    => 'Fritz (Erkek)',
-        'Ariana-PlayAI'   => 'Ariana (Kadın)',
-        'Brianna-PlayAI'  => 'Brianna (Kadın)',
-        'Cillian-PlayAI'  => 'Cillian (Erkek)',
-        'Gus-PlayAI'      => 'Gus (Erkek)',
-        'Mikail-PlayAI'   => 'Mikail (Erkek)',
-        'Quinn-PlayAI'    => 'Quinn (Nötr)',
+const MINIMAX_MODELS = [
+    'speech-02-turbo'  => 'Speech-02 Turbo (Hızlı, Önerilen)',
+    'speech-02-hd'     => 'Speech-02 HD (Yüksek Kalite)',
+    'speech-2.6-turbo' => 'Speech-2.6 Turbo',
+    'speech-2.6-hd'    => 'Speech-2.6 HD',
+    'speech-2.8-turbo' => 'Speech-2.8 Turbo (En Yeni)',
+    'speech-2.8-hd'    => 'Speech-2.8 HD (En Yeni, HD)',
+];
+
+// Curated voice presets by language (voice_id => display name)
+const MINIMAX_VOICE_PRESETS = [
+    'tr' => [
+        'Turkish_Trustworthyman' => 'Güvenilir Erkek',
+        'Turkish_CalmWoman'      => 'Sakin Kadın',
     ],
-    'playai-tts-arabic' => [
-        'Ahmad-PlayAI'  => 'Ahmad (Erkek)',
-        'Nadia-PlayAI'  => 'Nadia (Kadın)',
-        'Amira-PlayAI'  => 'Amira (Kadın)',
+    'en' => [
+        'English_expressive_narrator' => 'Expressive Narrator (E)',
+        'English_Booming_man'         => 'Booming Man (E)',
+        'English_trustworthy_man'     => 'Trustworthy Man (E)',
+        'English_cheerful_lady'       => 'Cheerful Lady (K)',
+        'English_sweet_lady'          => 'Sweet Lady (K)',
+    ],
+    'de' => [
+        'German_Booming_man'  => 'Booming Man (E)',
+        'German_sweet_lady'   => 'Sweet Lady (K)',
+    ],
+    'fr' => [
+        'French_Booming_man'  => 'Booming Man (E)',
+        'French_sweet_lady'   => 'Sweet Lady (K)',
+    ],
+    'es' => [
+        'Spanish_Booming_man' => 'Booming Man (E)',
+        'Spanish_sweet_lady'  => 'Sweet Lady (K)',
+    ],
+    'it' => [
+        'Italian_Booming_man' => 'Booming Man (E)',
+        'Italian_sweet_lady'  => 'Sweet Lady (K)',
+    ],
+    'pt' => [
+        'Portuguese_Booming_man' => 'Booming Man (E)',
+        'Portuguese_sweet_lady'  => 'Sweet Lady (K)',
+    ],
+    'ru' => [
+        'Russian_strict_woman' => 'Strict Woman (K)',
+        'Russian_jovial_man'   => 'Jovial Man (E)',
+    ],
+    'ar' => [
+        'Arabic_Booming_man'  => 'Booming Man (E)',
+        'Arabic_sweet_lady'   => 'Sweet Lady (K)',
+    ],
+    'zh' => [
+        'Chinese_Booming_man' => 'Booming Man (E)',
+        'Chinese_sweet_lady'  => 'Sweet Lady (K)',
+    ],
+    'ja' => [
+        'Japanese_sweet_lady'          => 'Sweet Lady (K)',
+        'Japanese_expressive_narrator' => 'Expressive Narrator (E)',
+    ],
+    'ko' => [
+        'Korean_sweet_lady'          => 'Sweet Lady (K)',
+        'Korean_expressive_narrator' => 'Expressive Narrator (E)',
     ],
 ];
