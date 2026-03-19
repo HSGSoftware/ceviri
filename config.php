@@ -215,7 +215,7 @@ function groqTranscribeModels(): array
     if (is_string($m) && trim($m) !== '') {
         return [trim($m)];
     }
-    return ['whisper-large-v3-turbo', 'whisper-large-v3'];
+    return ['whisper-large-v3', 'whisper-large-v3-turbo'];
 }
 
 function groqChatModels(): array
