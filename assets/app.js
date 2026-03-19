@@ -2,6 +2,14 @@
   const cfg = window.__APP__ || {};
   const I = cfg.i18n || {};
 
+  function apiAbs(path) {
+    if (!path || /^https?:\/\//i.test(path)) {
+      return path;
+    }
+    const o = window.location.origin;
+    return path.startsWith('/') ? o + path : new URL(path, window.location.href).href;
+  }
+
   const el = (id) => document.getElementById(id);
   const yourLang = el('your-lang');
   const theirLang = el('their-lang');
@@ -99,7 +107,12 @@
     mediaRecorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) chunks.push(e.data);
     };
-    mediaRecorder.start();
+    const sliceMs = 250;
+    try {
+      mediaRecorder.start(sliceMs);
+    } catch {
+      mediaRecorder.start();
+    }
     btnRec.classList.add('recording');
     setStatus(t('listening'), 'busy');
   }
@@ -112,6 +125,11 @@
     const mr = mediaRecorder;
     mediaRecorder = null;
 
+    if (typeof mr.requestData === 'function') {
+      try {
+        mr.requestData();
+      } catch (_) {}
+    }
     await new Promise((resolve) => {
       mr.onstop = resolve;
       mr.stop();
@@ -129,13 +147,25 @@
     fd.append('audio', blob, 'clip.webm');
     fd.append('language', yourLang.value);
 
-    let tr;
+    async function readJsonResponse(r) {
+      const text = await r.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    }
+
+    let r1;
     try {
-      const r1 = await fetch(cfg.apiTranscribe, { method: 'POST', body: fd });
-      tr = await r1.json();
-      if (!r1.ok) throw new Error(tr.error || 'transcribe');
+      r1 = await fetch(apiAbs(cfg.apiTranscribe), { method: 'POST', body: fd });
     } catch {
       setStatus(t('error_network'), 'err');
+      return;
+    }
+    const tr = await readJsonResponse(r1);
+    if (!r1.ok || !tr || typeof tr !== 'object') {
+      setStatus(t('error_api'), 'err');
       return;
     }
 
@@ -152,19 +182,23 @@
     const to = theirLang.value;
     let out = spoken;
     if (from !== to) {
+      let r2;
       try {
-        const r2 = await fetch(cfg.apiTranslate, {
+        r2 = await fetch(apiAbs(cfg.apiTranslate), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: spoken, from, to }),
         });
-        const tj = await r2.json();
-        if (!r2.ok) throw new Error(tj.error || 'translate');
-        out = (tj.text || '').trim() || spoken;
       } catch {
+        setStatus(t('error_network'), 'err');
+        return;
+      }
+      const tj = await readJsonResponse(r2);
+      if (!r2.ok || !tj || typeof tj !== 'object') {
         setStatus(t('error_api'), 'err');
         return;
       }
+      out = (tj.text || '').trim() || spoken;
     }
 
     theirText.textContent = out;

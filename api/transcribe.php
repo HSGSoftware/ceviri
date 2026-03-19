@@ -32,16 +32,50 @@ $tmp = $_FILES['audio']['tmp_name'];
 $lang = isset($_POST['language']) ? preg_replace('/[^a-z]/i', '', (string) $_POST['language']) : '';
 $lang = strtolower(substr($lang, 0, 5));
 
-$mime = mime_content_type($tmp);
-if (!is_string($mime)) {
+$mime = @mime_content_type($tmp);
+if (!is_string($mime) || $mime === '') {
     $mime = 'application/octet-stream';
 }
 
-if (!str_starts_with($mime, 'audio/') && $mime !== 'video/webm') {
+$head = @file_get_contents($tmp, false, null, 0, 16);
+if (is_string($head) && $head !== '') {
+    if (strlen($head) >= 4 && substr($head, 0, 4) === "\x1a\x45\xdf\xa3") {
+        $mime = 'video/webm';
+    } elseif (strlen($head) >= 8 && substr($head, 4, 4) === 'ftyp') {
+        $mime = 'video/mp4';
+    } elseif (str_starts_with($head, 'OggS')) {
+        $mime = 'audio/ogg';
+    } elseif (strlen($head) >= 12 && str_starts_with($head, 'RIFF') && substr($head, 8, 4) === 'WAVE') {
+        $mime = 'audio/wav';
+    } elseif (str_starts_with($head, 'ID3')
+        || (strlen($head) >= 2 && ord($head[0]) === 0xff && (ord($head[1]) & 0xe0) === 0xe0)) {
+        $mime = 'audio/mpeg';
+    }
+}
+
+$allowedVideo = ['video/webm', 'video/mp4', 'video/quicktime'];
+$ok = str_starts_with($mime, 'audio/') || in_array($mime, $allowedVideo, true)
+    || $mime === 'application/octet-stream';
+if (!$ok) {
     jsonResponse(['error' => 'bad_mime', 'mime' => $mime], 400);
 }
 
-$cf = new CURLFile($tmp, $mime, 'clip.webm');
+if ($mime === 'application/octet-stream') {
+    $mime = 'audio/webm';
+}
+
+$clipName = 'clip.webm';
+if (str_contains($mime, 'mp4') || str_contains($mime, 'quicktime')) {
+    $clipName = 'clip.mp4';
+} elseif (str_contains($mime, 'wav') || str_contains($mime, 'wave')) {
+    $clipName = 'clip.wav';
+} elseif (str_contains($mime, 'mpeg') || str_contains($mime, 'mp3')) {
+    $clipName = 'clip.mp3';
+} elseif (str_contains($mime, 'ogg')) {
+    $clipName = 'clip.ogg';
+}
+
+$cf = new CURLFile($tmp, $mime, $clipName);
 $post = [
     'file' => $cf,
     'model' => 'whisper-large-v3',
