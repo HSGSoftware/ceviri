@@ -179,6 +179,40 @@ function groqPost(string $endpoint, array $data, bool $multipart = false): array
 }
 
 // Returns MP3 binary data on success, or ['error' => '...'] on failure
+function openaiSTT(string $filePath, string $mime, string $ext, string $model, string $language): array {
+    $apiKey = getSetting('openai_api_key');
+    if (empty($apiKey)) return ['error' => 'OpenAI API anahtarı ayarlanmamış'];
+
+    $postData = [
+        'file'            => new CURLFile($filePath, $mime, 'audio.' . $ext),
+        'model'           => $model,
+        'response_format' => 'verbose_json',
+    ];
+    if ($language && $language !== 'auto') {
+        $postData['language'] = $language;
+    }
+
+    $ch = curl_init('https://api.openai.com/v1/audio/transcriptions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $apiKey],
+        CURLOPT_POSTFIELDS     => $postData,
+    ]);
+    $response = curl_exec($ch);
+    $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr  = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlErr) return ['error' => 'cURL: ' . $curlErr];
+    $decoded = json_decode($response, true) ?? [];
+    if ($code !== 200) {
+        return ['error' => $decoded['error']['message'] ?? "HTTP {$code}"];
+    }
+    return $decoded;
+}
+
 function minimaxTTS(string $text, string $model, string $voiceId, float $speed, float $vol, int $pitch): string|array {
     $apiKey = getSetting('minimax_api_key');
     if (empty($apiKey)) return ['error' => 'MiniMax API anahtarı ayarlanmamış'];
@@ -258,9 +292,9 @@ const LANG_NAMES_EN = [
 ];
 
 const STT_MODELS = [
-    'whisper-large-v3-turbo' => 'Whisper Large v3 Turbo (Önerilen)',
-    'whisper-large-v3'       => 'Whisper Large v3',
-    'distil-whisper-large-v3-en' => 'Distil Whisper (Sadece İngilizce)',
+    'whisper-1'              => 'Whisper-1 (Önerilen)',
+    'gpt-4o-transcribe'      => 'GPT-4o Transcribe (Yüksek Kalite)',
+    'gpt-4o-mini-transcribe' => 'GPT-4o Mini Transcribe (Hızlı)',
 ];
 
 const TRANSLATION_MODELS = [

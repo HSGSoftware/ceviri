@@ -19,12 +19,7 @@ if (!$audioFile || $audioFile['error'] !== UPLOAD_ERR_OK) {
 }
 
 $language = trim($_POST['language'] ?? 'auto');
-$model    = getSetting('stt_model', 'whisper-large-v3-turbo');
-
-// distil-whisper yalnızca İngilizce destekler — başka dil seçilmişse otomatik geç
-if ($model === 'distil-whisper-large-v3-en' && $language !== 'en' && $language !== 'auto') {
-    $model = 'whisper-large-v3-turbo';
-}
+$model    = getSetting('stt_model', 'whisper-1');
 
 $mime = $audioFile['type'] ?: 'audio/webm';
 $ext  = match(true) {
@@ -39,29 +34,15 @@ $tmpPath = $audioFile['tmp_name'];
 $newPath = $tmpPath . '.' . $ext;
 rename($tmpPath, $newPath);
 
-$postData = [
-    'file'            => new CURLFile($newPath, $mime, 'audio.' . $ext),
-    'model'           => $model,
-    'response_format' => 'verbose_json', // returns detected_language too
-];
-
-// Pass language hint only when explicitly set (not 'auto')
-if ($language && $language !== 'auto') {
-    $postData['language'] = $language;
-}
-
-$result = groqPost('audio/transcriptions', $postData, true);
+$result = openaiSTT($newPath, $mime, $ext, $model, $language);
 @unlink($newPath);
 
 if (isset($result['error'])) {
     jsonResponse(['error' => $result['error']], 500);
 }
 
-$text          = trim($result['text'] ?? '');
-$detectedLang  = $result['language'] ?? $language;
-
 jsonResponse([
-    'text'          => $text,
-    'detected_lang' => $detectedLang,
+    'text'          => trim($result['text'] ?? ''),
+    'detected_lang' => $result['language'] ?? $language,
     'model_used'    => $model,
 ]);

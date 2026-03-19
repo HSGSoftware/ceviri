@@ -7,6 +7,7 @@ $errors  = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $appBaseUrl     = trim($_POST['app_base_url']          ?? '');
+    $openaiApiKey   = trim($_POST['openai_api_key']        ?? '');
     $apiKey         = trim($_POST['groq_api_key']          ?? '');
     $minimaxApiKey  = trim($_POST['minimax_api_key']       ?? '');
     $sttModel       = $_POST['stt_model']                  ?? 'whisper-large-v3-turbo';
@@ -31,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         setSetting('app_base_url',        $appBaseUrl);
+        setSetting('openai_api_key',      $openaiApiKey);
         setSetting('groq_api_key',        $apiKey);
         setSetting('minimax_api_key',     $minimaxApiKey);
         setSetting('stt_model',           $sttModel);
@@ -47,9 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $cur = [
     'app_base_url'       => getSetting('app_base_url'),
+    'openai_api_key'     => getSetting('openai_api_key'),
     'groq_api_key'       => getSetting('groq_api_key'),
     'minimax_api_key'    => getSetting('minimax_api_key'),
-    'stt_model'          => getSetting('stt_model',          'whisper-large-v3-turbo'),
+    'stt_model'          => getSetting('stt_model',          'whisper-1'),
     'translation_model'  => getSetting('translation_model',  'llama-3.3-70b-versatile'),
     'tts_engine'         => getSetting('tts_engine',         'webspeech'),
     'minimax_tts_model'  => getSetting('minimax_tts_model',  'speech-02-turbo'),
@@ -207,9 +210,32 @@ $presetsJson = json_encode(MINIMAX_VOICE_PRESETS, JSON_UNESCAPED_UNICODE);
         </div>
       </section>
 
-      <!-- Groq API (STT + Translation) -->
+      <!-- OpenAI API (STT) -->
       <section class="settings-section">
-        <h2 class="section-title">Groq API — Ses Tanıma &amp; Çeviri</h2>
+        <h2 class="section-title">OpenAI API — Ses Tanıma (Whisper)</h2>
+        <div class="field">
+          <label class="field-label" for="openai_api_key">OpenAI API Anahtarı</label>
+          <div class="input-wrap">
+            <input type="password" id="openai_api_key" name="openai_api_key"
+              class="field-input" value="<?= htmlspecialchars($cur['openai_api_key']) ?>"
+              placeholder="sk-..." autocomplete="off">
+            <button type="button" class="eye-btn" onclick="toggleVis('openai_api_key')">👁</button>
+          </div>
+          <p class="field-hint"><a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a></p>
+        </div>
+        <div class="field">
+          <label class="field-label" for="stt_model">Whisper Modeli</label>
+          <select id="stt_model" name="stt_model" class="field-select">
+            <?php foreach (STT_MODELS as $val => $label): ?>
+            <option value="<?= $val ?>" <?= $cur['stt_model'] === $val ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+      </section>
+
+      <!-- Groq API (Translation) -->
+      <section class="settings-section">
+        <h2 class="section-title">Groq API — Çeviri (LLM)</h2>
         <div class="field">
           <label class="field-label" for="groq_api_key">Groq API Anahtarı</label>
           <div class="input-wrap">
@@ -220,18 +246,8 @@ $presetsJson = json_encode(MINIMAX_VOICE_PRESETS, JSON_UNESCAPED_UNICODE);
           </div>
           <p class="field-hint"><a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a></p>
         </div>
-
         <div class="field">
-          <label class="field-label" for="stt_model">Ses Tanıma Modeli (Whisper)</label>
-          <select id="stt_model" name="stt_model" class="field-select">
-            <?php foreach (STT_MODELS as $val => $label): ?>
-            <option value="<?= $val ?>" <?= $cur['stt_model'] === $val ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-
-        <div class="field">
-          <label class="field-label" for="translation_model">Çeviri Modeli (LLM)</label>
+          <label class="field-label" for="translation_model">Çeviri Modeli</label>
           <input type="text" id="translation_model" name="translation_model"
             class="field-input" list="translation_model_list"
             value="<?= htmlspecialchars($cur['translation_model']) ?>"
