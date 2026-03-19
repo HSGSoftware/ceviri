@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             @unlink($sf);
         }
     } else {
-        file_put_contents($sf, json_encode(['groq_api_key' => $key], JSON_UNESCAPED_UNICODE), LOCK_EX);
+        file_put_contents($sf, json_encode(['groq_api_key' => $key], JSON_UNESCAPED_UNICODE));
         @chmod($sf, 0600);
     }
     header('Location: ' . $pathPrefix . '/settings.php?saved=1', true, 302);
