@@ -34,6 +34,18 @@
     return I[key] || key;
   }
 
+  function apiErrDetail(obj) {
+    if (!obj || typeof obj !== 'object') {
+      return '';
+    }
+    const m = obj.message;
+    if (typeof m === 'string' && m.trim() !== '') {
+      const s = m.trim();
+      return s.length > 180 ? s.slice(0, 180) + '…' : s;
+    }
+    return '';
+  }
+
   function bcp47(code) {
     const m = {
       zh: 'zh-CN',
@@ -145,7 +157,6 @@
 
     const fd = new FormData();
     fd.append('audio', blob, 'clip.webm');
-    fd.append('language', yourLang.value);
 
     async function readJsonResponse(r) {
       const text = await r.text();
@@ -164,7 +175,11 @@
       return;
     }
     const tr = await readJsonResponse(r1);
-    if (!r1.ok || !tr || typeof tr !== 'object') {
+    if (!r1.ok) {
+      setStatus(t('error_api') + (apiErrDetail(tr) ? ' ' + apiErrDetail(tr) : ''), 'err');
+      return;
+    }
+    if (!tr || typeof tr !== 'object') {
       setStatus(t('error_api'), 'err');
       return;
     }
@@ -194,7 +209,11 @@
         return;
       }
       const tj = await readJsonResponse(r2);
-      if (!r2.ok || !tj || typeof tj !== 'object') {
+      if (!r2.ok) {
+        setStatus(t('error_api') + (apiErrDetail(tj) ? ' ' + apiErrDetail(tj) : ''), 'err');
+        return;
+      }
+      if (!tj || typeof tj !== 'object') {
         setStatus(t('error_api'), 'err');
         return;
       }

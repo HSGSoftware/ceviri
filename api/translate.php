@@ -55,44 +55,56 @@ $sourceName = $langNames[$from] ?? $from;
 $system = 'You are a translator. Translate the user message from ' . $sourceName . ' to ' . $targetName . '. '
     . 'Output only the translation, no quotes, no explanation.';
 
-$payload = json_encode([
-    'model' => 'llama-3.3-70b-versatile',
-    'messages' => [
-        ['role' => 'system', 'content' => $system],
-        ['role' => 'user', 'content' => $text],
-    ],
-    'temperature' => 0.2,
-    'max_tokens' => 2048,
-], JSON_UNESCAPED_UNICODE);
+$models = groqChatModels();
+$lastCode = 0;
+$lastBody = '';
+$lastMsg = null;
 
-$ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
-curl_setopt_array($ch, [
-    CURLOPT_POST => true,
-    CURLOPT_HTTPHEADER => [
-        'Authorization: Bearer ' . $key,
-        'Content-Type: application/json',
-    ],
-    CURLOPT_POSTFIELDS => $payload,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT => 60,
-]);
+foreach ($models as $model) {
+    $payload = json_encode([
+        'model' => $model,
+        'messages' => [
+            ['role' => 'system', 'content' => $system],
+            ['role' => 'user', 'content' => $text],
+        ],
+        'temperature' => 0.2,
+        'max_tokens' => 2048,
+    ], JSON_UNESCAPED_UNICODE);
 
-$body = curl_exec($ch);
-$code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
+    [$body, $code, $cerr] = groqCurlPostJson(
+        'https://api.groq.com/openai/v1/chat/completions',
+        $key,
+        $payload,
+        90
+    );
 
-if ($body === false || $code >= 400) {
-    jsonResponse(['error' => 'groq_translate', 'status' => $code], 502);
+    if ($body === false || $cerr !== '') {
+        jsonResponse([
+            'error' => 'curl',
+            'message' => $cerr !== '' ? $cerr : 'curl_exec failed',
+        ], 502);
+    }
+
+    if ($code < 400) {
+        $data = json_decode($body, true);
+        if (!is_array($data)) {
+            jsonResponse(['error' => 'bad_response'], 502);
+        }
+        $choice = $data['choices'][0]['message']['content'] ?? null;
+        if (!is_string($choice)) {
+            jsonResponse(['error' => 'empty_translation'], 502);
+        }
+        jsonResponse(['text' => trim($choice)]);
+    }
+
+    $lastCode = $code;
+    $lastBody = is_string($body) ? $body : '';
+    $lastMsg = groqExtractErrorMessage($lastBody);
 }
 
-$data = json_decode($body, true);
-if (!is_array($data)) {
-    jsonResponse(['error' => 'bad_response'], 502);
-}
-
-$choice = $data['choices'][0]['message']['content'] ?? null;
-if (!is_string($choice)) {
-    jsonResponse(['error' => 'empty_translation'], 502);
-}
-
-jsonResponse(['text' => trim($choice)]);
+$outCode = ($lastCode >= 400 && $lastCode < 600) ? $lastCode : 502;
+jsonResponse([
+    'error' => 'groq_translate',
+    'status' => $lastCode,
+    'message' => $lastMsg ?? (strlen($lastBody) > 0 ? substr($lastBody, 0, 500) : null),
+], $outCode);

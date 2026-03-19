@@ -29,8 +29,6 @@ if (!isset($_FILES['audio']) || !is_uploaded_file($_FILES['audio']['tmp_name']))
 }
 
 $tmp = $_FILES['audio']['tmp_name'];
-$lang = isset($_POST['language']) ? preg_replace('/[^a-z]/i', '', (string) $_POST['language']) : '';
-$lang = strtolower(substr($lang, 0, 5));
 
 $mime = @mime_content_type($tmp);
 if (!is_string($mime) || $mime === '') {
@@ -64,6 +62,10 @@ if ($mime === 'application/octet-stream') {
     $mime = 'audio/webm';
 }
 
+if ($mime === 'video/webm') {
+    $mime = 'audio/webm';
+}
+
 $clipName = 'clip.webm';
 if (str_contains($mime, 'mp4') || str_contains($mime, 'quicktime')) {
     $clipName = 'clip.mp4';
@@ -76,37 +78,49 @@ if (str_contains($mime, 'mp4') || str_contains($mime, 'quicktime')) {
 }
 
 $cf = new CURLFile($tmp, $mime, $clipName);
-$post = [
-    'file' => $cf,
-    'model' => 'whisper-large-v3',
-    'response_format' => 'json',
-];
-if ($lang !== '') {
-    $post['language'] = $lang;
+
+$models = groqTranscribeModels();
+$lastCode = 0;
+$lastBody = '';
+$lastMsg = null;
+
+foreach ($models as $model) {
+    $post = [
+        'file' => $cf,
+        'model' => $model,
+        'response_format' => 'json',
+    ];
+
+    [$body, $code, $cerr] = groqCurlPostMultipart(
+        'https://api.groq.com/openai/v1/audio/transcriptions',
+        $key,
+        $post,
+        120
+    );
+
+    if ($body === false || $cerr !== '') {
+        jsonResponse([
+            'error' => 'curl',
+            'message' => $cerr !== '' ? $cerr : 'curl_exec failed',
+        ], 502);
+    }
+
+    if ($code < 400) {
+        $data = json_decode($body, true);
+        if (is_array($data) && isset($data['text'])) {
+            jsonResponse(['text' => trim((string) $data['text'])]);
+        }
+        jsonResponse(['error' => 'bad_response', 'message' => groqExtractErrorMessage($body)], 502);
+    }
+
+    $lastCode = $code;
+    $lastBody = is_string($body) ? $body : '';
+    $lastMsg = groqExtractErrorMessage($lastBody);
 }
 
-$ch = curl_init('https://api.groq.com/openai/v1/audio/transcriptions');
-curl_setopt_array($ch, [
-    CURLOPT_POST => true,
-    CURLOPT_HTTPHEADER => [
-        'Authorization: Bearer ' . $key,
-    ],
-    CURLOPT_POSTFIELDS => $post,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT => 120,
-]);
-
-$body = curl_exec($ch);
-$code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-if ($body === false || $code >= 400) {
-    jsonResponse(['error' => 'groq_transcribe', 'status' => $code, 'body' => $body], 502);
-}
-
-$data = json_decode($body, true);
-if (!is_array($data) || !isset($data['text'])) {
-    jsonResponse(['error' => 'bad_response'], 502);
-}
-
-jsonResponse(['text' => trim((string) $data['text'])]);
+$outCode = ($lastCode >= 400 && $lastCode < 600) ? $lastCode : 502;
+jsonResponse([
+    'error' => 'groq_transcribe',
+    'status' => $lastCode,
+    'message' => $lastMsg ?? (strlen($lastBody) > 0 ? substr($lastBody, 0, 500) : null),
+], $outCode);

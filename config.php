@@ -187,6 +187,95 @@ function getLanIp(): string
     return $candidates[0];
 }
 
+function groqExtractErrorMessage(?string $body): ?string
+{
+    if ($body === null || $body === '') {
+        return null;
+    }
+    $j = json_decode($body, true);
+    if (!is_array($j)) {
+        $t = trim($body);
+        return strlen($t) < 400 ? $t : null;
+    }
+    if (isset($j['error']) && is_array($j['error']) && isset($j['error']['message']) && is_string($j['error']['message'])) {
+        return $j['error']['message'];
+    }
+    if (isset($j['error']) && is_string($j['error'])) {
+        return $j['error'];
+    }
+    if (isset($j['message']) && is_string($j['message'])) {
+        return $j['message'];
+    }
+    return null;
+}
+
+function groqTranscribeModels(): array
+{
+    $m = getenv('GROQ_TRANSCRIBE_MODEL');
+    if (is_string($m) && trim($m) !== '') {
+        return [trim($m)];
+    }
+    return ['whisper-large-v3-turbo', 'whisper-large-v3'];
+}
+
+function groqChatModels(): array
+{
+    $m = getenv('GROQ_CHAT_MODEL');
+    if (is_string($m) && trim($m) !== '') {
+        return [trim($m)];
+    }
+    return ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile'];
+}
+
+/**
+ * @return array{0: string|false, 1: int, 2: string}
+ */
+function groqCurlPostMultipart(string $url, string $apiKey, array $postFields, int $timeout = 120): array
+{
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . $apiKey,
+        ],
+        CURLOPT_POSTFIELDS => $postFields,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_CONNECTTIMEOUT => 25,
+    ]);
+    $body = curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $cerr = (string) curl_error($ch);
+    curl_close($ch);
+
+    return [$body, $code, $cerr];
+}
+
+/**
+ * @return array{0: string|false, 1: int, 2: string}
+ */
+function groqCurlPostJson(string $url, string $apiKey, string $jsonBody, int $timeout = 90): array
+{
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . $apiKey,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => $jsonBody,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_CONNECTTIMEOUT => 25,
+    ]);
+    $body = curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $cerr = (string) curl_error($ch);
+    curl_close($ch);
+
+    return [$body, $code, $cerr];
+}
+
 function clientLanIpForDisplay(): ?string
 {
     $remote = $_SERVER['REMOTE_ADDR'] ?? '';
