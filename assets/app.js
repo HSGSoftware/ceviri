@@ -433,10 +433,18 @@ async function processAudio() {
     setStatus(`<span class="spinner"></span>${t('transcribing')}`);
   }
 
+  // Derive explicit format string so PHP doesn't have to guess from MIME
+  const audioFormat = audioName.endsWith('.wav') ? 'wav'
+    : audioName.endsWith('.mp3') ? 'mp3'
+    : audioName.endsWith('.mp4') || audioName.endsWith('.m4a') ? 'mp4'
+    : audioName.endsWith('.ogg') ? 'ogg'
+    : 'webm';
+
   const formData = new FormData();
-  formData.append('audio',     blob,   audioName);
-  formData.append('language',  myLang);
-  formData.append('nonverbal', sendNonVerbal ? '1' : '0'); // PHP uses this to pick model
+  formData.append('audio',        blob,   audioName);
+  formData.append('language',     myLang);
+  formData.append('nonverbal',    sendNonVerbal ? '1' : '0');
+  formData.append('audio_format', audioFormat); // explicit, no MIME guessing
 
   let transcribed = '';
   try {
