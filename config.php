@@ -179,7 +179,7 @@ function groqPost(string $endpoint, array $data, bool $multipart = false): array
 }
 
 // Returns MP3 binary data on success, or ['error' => '...'] on failure
-function openaiSTT(string $filePath, string $mime, string $ext, string $model, string $language): array {
+function openaiSTT(string $filePath, string $mime, string $ext, string $model, string $language, string $prompt = ''): array {
     $apiKey = getSetting('openai_api_key');
     if (empty($apiKey)) return ['error' => 'OpenAI API anahtarı ayarlanmamış'];
 
@@ -190,6 +190,9 @@ function openaiSTT(string $filePath, string $mime, string $ext, string $model, s
     ];
     if ($language && $language !== 'auto') {
         $postData['language'] = $language;
+    }
+    if ($prompt) {
+        $postData['prompt'] = $prompt;
     }
 
     $ch = curl_init('https://api.openai.com/v1/audio/transcriptions');
@@ -210,6 +213,36 @@ function openaiSTT(string $filePath, string $mime, string $ext, string $model, s
     if ($code !== 200) {
         return ['error' => $decoded['error']['message'] ?? "HTTP {$code}"];
     }
+    return $decoded;
+}
+
+function openaiChat(string $model, array $messages, float $temperature = 0.1): array {
+    $apiKey = getSetting('openai_api_key');
+    if (empty($apiKey)) return ['error' => 'OpenAI API anahtarı ayarlanmamış'];
+
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $apiKey,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => json_encode([
+            'model'       => $model,
+            'messages'    => $messages,
+            'temperature' => $temperature,
+            'max_tokens'  => 2000,
+        ]),
+    ]);
+    $response = curl_exec($ch);
+    $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr  = curl_error($ch);
+    curl_close($ch);
+    if ($curlErr) return ['error' => 'cURL: ' . $curlErr];
+    $decoded = json_decode($response, true) ?? [];
+    if ($code !== 200) return ['error' => $decoded['error']['message'] ?? "HTTP {$code}"];
     return $decoded;
 }
 
@@ -298,17 +331,13 @@ const STT_MODELS = [
 ];
 
 const TRANSLATION_MODELS = [
-    'llama-3.3-70b-versatile'          => 'Llama 3.3 70B (Önerilen)',
-    'llama-3.1-70b-versatile'          => 'Llama 3.1 70B',
-    'llama-3.1-8b-instant'             => 'Llama 3.1 8B (Hızlı)',
-    'qwen-qwq-32b'                     => 'Qwen QwQ 32B (Akıl Yürütme)',
-    'qwen-2.5-32b'                     => 'Qwen 2.5 32B',
-    'qwen-2.5-coder-32b'               => 'Qwen 2.5 Coder 32B',
-    'deepseek-r1-distill-qwen-32b'     => 'DeepSeek R1 Qwen 32B',
-    'deepseek-r1-distill-llama-70b'    => 'DeepSeek R1 LLaMA 70B',
-    'mistral-saba-24b'                 => 'Mistral Saba 24B (Çok Dilli)',
-    'mixtral-8x7b-32768'               => 'Mixtral 8x7B',
-    'gemma2-9b-it'                     => 'Gemma 2 9B',
+    'gpt-4o-mini'  => 'GPT-4o Mini (Hızlı, Önerilen)',
+    'gpt-4o'       => 'GPT-4o (Yüksek Kalite)',
+    'gpt-4.1-mini' => 'GPT-4.1 Mini',
+    'gpt-4.1'      => 'GPT-4.1',
+    'gpt-4-turbo'  => 'GPT-4 Turbo',
+    'o1-mini'      => 'o1 Mini (Akıl Yürütme)',
+    'o3-mini'      => 'o3 Mini',
 ];
 
 const MINIMAX_MODELS = [

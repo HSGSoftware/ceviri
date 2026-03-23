@@ -8,8 +8,9 @@ $errors  = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $appBaseUrl     = trim($_POST['app_base_url']          ?? '');
     $openaiApiKey   = trim($_POST['openai_api_key']        ?? '');
-    $apiKey         = trim($_POST['groq_api_key']          ?? '');
     $minimaxApiKey  = trim($_POST['minimax_api_key']       ?? '');
+    $sttNonverbal   = isset($_POST['stt_nonverbal']) ? '1' : '0';
+    $apiKey         = '';
     $sttModel       = $_POST['stt_model']                  ?? 'whisper-large-v3-turbo';
     $transModel     = $_POST['translation_model']          ?? 'llama-3.3-70b-versatile';
     $ttsEngine      = $_POST['tts_engine']                 ?? 'webspeech';
@@ -33,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         setSetting('app_base_url',        $appBaseUrl);
         setSetting('openai_api_key',      $openaiApiKey);
-        setSetting('groq_api_key',        $apiKey);
+        setSetting('stt_nonverbal',       $sttNonverbal);
         setSetting('minimax_api_key',     $minimaxApiKey);
         setSetting('stt_model',           $sttModel);
         setSetting('translation_model',   $transModel);
@@ -50,9 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $cur = [
     'app_base_url'       => getSetting('app_base_url'),
     'openai_api_key'     => getSetting('openai_api_key'),
-    'groq_api_key'       => getSetting('groq_api_key'),
     'minimax_api_key'    => getSetting('minimax_api_key'),
     'stt_model'          => getSetting('stt_model',          'whisper-1'),
+    'stt_nonverbal'      => getSetting('stt_nonverbal',      '1'),
     'translation_model'  => getSetting('translation_model',  'llama-3.3-70b-versatile'),
     'tts_engine'         => getSetting('tts_engine',         'webspeech'),
     'minimax_tts_model'  => getSetting('minimax_tts_model',  'speech-02-turbo'),
@@ -210,9 +211,10 @@ $presetsJson = json_encode(MINIMAX_VOICE_PRESETS, JSON_UNESCAPED_UNICODE);
         </div>
       </section>
 
-      <!-- OpenAI API (STT) -->
+      <!-- OpenAI API (STT + Translation) -->
       <section class="settings-section">
-        <h2 class="section-title">OpenAI API — Ses Tanıma (Whisper)</h2>
+        <h2 class="section-title">OpenAI API — Ses Tanıma &amp; Çeviri</h2>
+
         <div class="field">
           <label class="field-label" for="openai_api_key">OpenAI API Anahtarı</label>
           <div class="input-wrap">
@@ -223,35 +225,34 @@ $presetsJson = json_encode(MINIMAX_VOICE_PRESETS, JSON_UNESCAPED_UNICODE);
           </div>
           <p class="field-hint"><a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a></p>
         </div>
+
         <div class="field">
-          <label class="field-label" for="stt_model">Whisper Modeli</label>
+          <label class="field-label" for="stt_model">Ses Tanıma Modeli (Whisper)</label>
           <select id="stt_model" name="stt_model" class="field-select">
             <?php foreach (STT_MODELS as $val => $label): ?>
             <option value="<?= $val ?>" <?= $cur['stt_model'] === $val ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
-      </section>
 
-      <!-- Groq API (Translation) -->
-      <section class="settings-section">
-        <h2 class="section-title">Groq API — Çeviri (LLM)</h2>
         <div class="field">
-          <label class="field-label" for="groq_api_key">Groq API Anahtarı</label>
-          <div class="input-wrap">
-            <input type="password" id="groq_api_key" name="groq_api_key"
-              class="field-input" value="<?= htmlspecialchars($cur['groq_api_key']) ?>"
-              placeholder="gsk_..." autocomplete="off">
-            <button type="button" class="eye-btn" onclick="toggleVis('groq_api_key')">👁</button>
-          </div>
-          <p class="field-hint"><a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a></p>
+          <label class="radio-label" style="cursor:pointer">
+            <input type="checkbox" name="stt_nonverbal" value="1"
+              <?= $cur['stt_nonverbal'] === '1' ? 'checked' : '' ?>
+              style="width:16px;height:16px;accent-color:var(--primary)">
+            Konuşma dışı sesleri algıla
+            <small style="color:var(--text-muted);display:block;margin-left:26px">
+              Kahkaha [laughter], iç çekme [sigh], öksürme [cough] gibi sesleri metne ekler
+            </small>
+          </label>
         </div>
+
         <div class="field">
           <label class="field-label" for="translation_model">Çeviri Modeli</label>
           <input type="text" id="translation_model" name="translation_model"
             class="field-input" list="translation_model_list"
             value="<?= htmlspecialchars($cur['translation_model']) ?>"
-            placeholder="llama-3.3-70b-versatile">
+            placeholder="gpt-4o-mini">
           <datalist id="translation_model_list">
             <?php foreach (TRANSLATION_MODELS as $val => $label): ?>
             <option value="<?= htmlspecialchars($val) ?>"><?= htmlspecialchars($label) ?></option>

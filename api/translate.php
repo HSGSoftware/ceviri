@@ -25,19 +25,14 @@ $translatedText = $text;
 if ($sourceLang !== $targetLang) {
     $srcName = LANG_NAMES_EN[$sourceLang] ?? $sourceLang;
     $tgtName = LANG_NAMES_EN[$targetLang] ?? $targetLang;
-    $model   = getSetting('translation_model', 'llama-3.3-70b-versatile');
+    $model   = getSetting('translation_model', 'gpt-4o-mini');
 
-    $result = groqPost('chat/completions', [
-        'model'       => $model,
-        'temperature' => 0.1,
-        'max_tokens'  => 2000,
-        'messages'    => [
-            [
-                'role'    => 'system',
-                'content' => "You are a professional translator. Translate the text from {$srcName} to {$tgtName}. Output ONLY the translation, nothing else.",
-            ],
-            ['role' => 'user', 'content' => $text],
+    $result = openaiChat($model, [
+        [
+            'role'    => 'system',
+            'content' => "You are a professional translator. Translate the text from {$srcName} to {$tgtName}. If the text contains non-verbal sounds in brackets like [laughter], [sigh], translate only the spoken words and keep the bracketed sounds as-is. Output ONLY the translation, nothing else.",
         ],
+        ['role' => 'user', 'content' => $text],
     ]);
 
     if (isset($result['error'])) jsonResponse(['error' => $result['error']], 500);
