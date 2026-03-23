@@ -20,7 +20,9 @@ if (!$audioFile || $audioFile['error'] !== UPLOAD_ERR_OK) {
 
 $language  = trim($_POST['language'] ?? 'auto');
 $model     = getSetting('stt_model', 'whisper-1');
-$nonVerbal = getSetting('stt_nonverbal', '1') === '1';
+// nonverbal=1 only when JS successfully converted to WAV (never trust raw webm for gpt-4o-audio-preview)
+$nonVerbal = getSetting('stt_nonverbal', '1') === '1'
+          && ($_POST['nonverbal'] ?? '0') === '1';
 
 $mime = $audioFile['type'] ?: 'audio/webm';
 $ext  = match(true) {

@@ -416,21 +416,27 @@ async function processAudio() {
   setStatus(`<span class="spinner"></span>${t('transcribing')}`);
 
   // gpt-4o-audio-preview only accepts wav/mp3 — convert when non-verbal is enabled
-  const nonVerbal = localStorage.getItem('stt_nonverbal') === '1';
-  let   audioName = 'audio.' + mimeExt(mimeType);
+  const nonVerbal  = localStorage.getItem('stt_nonverbal') === '1';
+  let   audioName  = 'audio.' + mimeExt(mimeType);
+  let   sendNonVerbal = false; // only set true if WAV conversion actually succeeded
 
   if (nonVerbal) {
+    setStatus(`<span class="spinner"></span>Ses dönüştürülüyor…`);
     try {
-      blob      = await blobToWav(blob);
-      audioName = 'audio.wav';
+      blob        = await blobToWav(blob);
+      audioName   = 'audio.wav';
+      sendNonVerbal = true;
     } catch (convErr) {
-      console.warn('WAV conversion failed, sending original:', convErr);
+      console.warn('WAV conversion failed, falling back to Whisper:', convErr);
+      setStatus('⚠ Dönüştürme başarısız, standart Whisper kullanılıyor');
     }
+    setStatus(`<span class="spinner"></span>${t('transcribing')}`);
   }
 
   const formData = new FormData();
-  formData.append('audio', blob, audioName);
-  formData.append('language', myLang);
+  formData.append('audio',     blob,   audioName);
+  formData.append('language',  myLang);
+  formData.append('nonverbal', sendNonVerbal ? '1' : '0'); // PHP uses this to pick model
 
   let transcribed = '';
   try {
@@ -740,28 +746,36 @@ async function patchSession(payload) {
 }
 
 // ─── WAV encoder (browser-side, no server deps) ───────────────────────────────
-// gpt-4o-audio-preview only accepts wav/mp3 so we convert webm→wav here.
+// gpt-4o-audio-preview only accepts wav/mp3 so we convert here before upload.
 async function blobToWav(blob) {
-  const TARGET_RATE = 16000; // 16 kHz mono – ideal for speech recognition
-  const ctx         = new OfflineAudioContext(1, 1, TARGET_RATE);
+  const TARGET_RATE = 16000; // 16 kHz mono – optimal for speech recognition
 
   const arrayBuffer = await blob.arrayBuffer();
-  // decodeAudioData needs a regular AudioContext on some browsers
-  const decodeCtx   = new AudioContext();
-  let   audioBuffer;
+
+  // Use a fresh AudioContext for decoding (suspended state is fine for decodeAudioData)
+  const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+  let audioBuffer;
   try {
-    audioBuffer = await decodeCtx.decodeAudioData(arrayBuffer);
+    // Callback form for maximum browser compat (iOS Safari older versions)
+    audioBuffer = await new Promise((resolve, reject) => {
+      decodeCtx.decodeAudioData(arrayBuffer, resolve, reject);
+    });
   } finally {
-    decodeCtx.close();
+    try { decodeCtx.close(); } catch (_) {}
+  }
+
+  if (!audioBuffer || audioBuffer.duration <= 0) {
+    throw new Error('Ses tamponu boş');
   }
 
   // Resample to TARGET_RATE via OfflineAudioContext
-  const offline = new OfflineAudioContext(1, Math.ceil(audioBuffer.duration * TARGET_RATE), TARGET_RATE);
-  const source  = offline.createBufferSource();
-  source.buffer = audioBuffer;
+  const numSamples = Math.max(1, Math.ceil(audioBuffer.duration * TARGET_RATE));
+  const offline    = new OfflineAudioContext(1, numSamples, TARGET_RATE);
+  const source     = offline.createBufferSource();
+  source.buffer    = audioBuffer;
   source.connect(offline.destination);
   source.start(0);
-  const resampled = await offline.startRendering();
+  const resampled  = await offline.startRendering();
 
   return audioBufferToWavBlob(resampled);
 }
