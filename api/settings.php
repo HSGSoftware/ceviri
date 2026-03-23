@@ -10,4 +10,5 @@ jsonResponse([
     'tts_engine'       => getSetting('tts_engine',        'webspeech'),
     'minimax_tts_model'=> getSetting('minimax_tts_model', 'speech-02-turbo'),
     'minimax_tts_voice'=> getSetting('minimax_tts_voice', 'Turkish_Trustworthyman'),
+    'stt_nonverbal'    => getSetting('stt_nonverbal',     '1'),
 ]);

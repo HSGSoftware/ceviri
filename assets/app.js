@@ -408,15 +408,29 @@ function handleCancelRec(e) {
 async function processAudio() {
   if (!audioChunks.length) { setProcessingDone(); setStatus(''); return; }
 
-  const mimeType = audioChunks[0].type || 'audio/webm';
-  const blob     = new Blob(audioChunks, { type: mimeType });
-  audioChunks    = [];
+  const mimeType   = audioChunks[0].type || 'audio/webm';
+  let   blob       = new Blob(audioChunks, { type: mimeType });
+  audioChunks      = [];
 
   // Step 1: Transcribe
   setStatus(`<span class="spinner"></span>${t('transcribing')}`);
+
+  // gpt-4o-audio-preview only accepts wav/mp3 — convert when non-verbal is enabled
+  const nonVerbal = localStorage.getItem('stt_nonverbal') === '1';
+  let   audioName = 'audio.' + mimeExt(mimeType);
+
+  if (nonVerbal) {
+    try {
+      blob      = await blobToWav(blob);
+      audioName = 'audio.wav';
+    } catch (convErr) {
+      console.warn('WAV conversion failed, sending original:', convErr);
+    }
+  }
+
   const formData = new FormData();
-  formData.append('audio', blob, 'audio.' + mimeExt(mimeType));
-  formData.append('language', myLang);  // language hint for Whisper
+  formData.append('audio', blob, audioName);
+  formData.append('language', myLang);
 
   let transcribed = '';
   try {
@@ -553,12 +567,9 @@ async function drainQueue() {
 async function loadServerSettings() {
   try {
     const data = await fetchJSON('api/settings.php');
-    if (data.tts_engine) {
-      localStorage.setItem('tts_engine',        data.tts_engine);
-    }
-    if (data.minimax_tts_voice) {
-      localStorage.setItem('minimax_tts_voice', data.minimax_tts_voice);
-    }
+    if (data.tts_engine)    localStorage.setItem('tts_engine',    data.tts_engine);
+    if (data.minimax_tts_voice) localStorage.setItem('minimax_tts_voice', data.minimax_tts_voice);
+    if (data.stt_nonverbal !== undefined) localStorage.setItem('stt_nonverbal', data.stt_nonverbal);
   } catch (_) {}
 }
 
@@ -726,4 +737,62 @@ async function patchSession(payload) {
       body: JSON.stringify({ session_id: SESSION_ID, ...payload }),
     });
   } catch (_) {}
+}
+
+// ─── WAV encoder (browser-side, no server deps) ───────────────────────────────
+// gpt-4o-audio-preview only accepts wav/mp3 so we convert webm→wav here.
+async function blobToWav(blob) {
+  const TARGET_RATE = 16000; // 16 kHz mono – ideal for speech recognition
+  const ctx         = new OfflineAudioContext(1, 1, TARGET_RATE);
+
+  const arrayBuffer = await blob.arrayBuffer();
+  // decodeAudioData needs a regular AudioContext on some browsers
+  const decodeCtx   = new AudioContext();
+  let   audioBuffer;
+  try {
+    audioBuffer = await decodeCtx.decodeAudioData(arrayBuffer);
+  } finally {
+    decodeCtx.close();
+  }
+
+  // Resample to TARGET_RATE via OfflineAudioContext
+  const offline = new OfflineAudioContext(1, Math.ceil(audioBuffer.duration * TARGET_RATE), TARGET_RATE);
+  const source  = offline.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offline.destination);
+  source.start(0);
+  const resampled = await offline.startRendering();
+
+  return audioBufferToWavBlob(resampled);
+}
+
+function audioBufferToWavBlob(buffer) {
+  const numCh      = 1;
+  const sampleRate = buffer.sampleRate;
+  const bitDepth   = 16;
+  const samples    = buffer.getChannelData(0);
+  const dataLen    = samples.length * 2;
+  const ab         = new ArrayBuffer(44 + dataLen);
+  const view       = new DataView(ab);
+
+  const str = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  str(0, 'RIFF');
+  view.setUint32(4,  36 + dataLen,                   true);
+  str(8, 'WAVE');
+  str(12, 'fmt ');
+  view.setUint32(16, 16,                              true);  // PCM chunk size
+  view.setUint16(20, 1,                               true);  // PCM format
+  view.setUint16(22, numCh,                           true);
+  view.setUint32(24, sampleRate,                      true);
+  view.setUint32(28, sampleRate * numCh * bitDepth / 8, true);
+  view.setUint16(32, numCh * bitDepth / 8,            true);
+  view.setUint16(34, bitDepth,                        true);
+  str(36, 'data');
+  view.setUint32(40, dataLen,                         true);
+
+  let off = 44;
+  for (let i = 0; i < samples.length; i++, off += 2) {
+    view.setInt16(off, Math.max(-1, Math.min(1, samples[i])) * 0x7FFF, true);
+  }
+  return new Blob([ab], { type: 'audio/wav' });
 }
