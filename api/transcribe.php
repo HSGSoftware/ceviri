@@ -18,9 +18,9 @@ if (!$audioFile || $audioFile['error'] !== UPLOAD_ERR_OK) {
     jsonResponse(['error' => $errMsg], 400);
 }
 
-$language   = trim($_POST['language'] ?? 'auto');
-$model      = getSetting('stt_model', 'whisper-1');
-$nonVerbal  = getSetting('stt_nonverbal', '1') === '1';
+$language  = trim($_POST['language'] ?? 'auto');
+$model     = getSetting('stt_model', 'whisper-1');
+$nonVerbal = getSetting('stt_nonverbal', '1') === '1';
 
 $mime = $audioFile['type'] ?: 'audio/webm';
 $ext  = match(true) {
@@ -35,13 +35,15 @@ $tmpPath = $audioFile['tmp_name'];
 $newPath = $tmpPath . '.' . $ext;
 rename($tmpPath, $newPath);
 
-// Prompt for non-verbal sound detection
-$prompt = '';
 if ($nonVerbal) {
-    $prompt = 'Transcribe all spoken words accurately. Also include non-verbal sounds in brackets, for example: [laughter], [giggling], [sigh], [cough], [crying], [applause], [music], [noise], [silence], [hmm], [wow].';
+    // gpt-4o-audio-preview: audio goes directly into the prompt → reliable non-verbal detection
+    $result     = openaiAudioTranscribe($newPath, $ext, $language, true);
+    $modelUsed  = 'gpt-4o-audio-preview';
+} else {
+    $result    = openaiSTT($newPath, $mime, $ext, $model, $language, '');
+    $modelUsed = $model;
 }
 
-$result = openaiSTT($newPath, $mime, $ext, $model, $language, $prompt);
 @unlink($newPath);
 
 if (isset($result['error'])) {
@@ -51,5 +53,5 @@ if (isset($result['error'])) {
 jsonResponse([
     'text'          => trim($result['text'] ?? ''),
     'detected_lang' => $result['language'] ?? $language,
-    'model_used'    => $model,
+    'model_used'    => $modelUsed,
 ]);

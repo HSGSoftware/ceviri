@@ -216,6 +216,78 @@ function openaiSTT(string $filePath, string $mime, string $ext, string $model, s
     return $decoded;
 }
 
+// Transcribes audio via gpt-4o-audio-preview — reliably detects non-verbal sounds
+function openaiAudioTranscribe(string $filePath, string $ext, string $language, bool $nonVerbal): array {
+    $apiKey = getSetting('openai_api_key');
+    if (empty($apiKey)) return ['error' => 'OpenAI API anahtarı ayarlanmamış'];
+
+    $audioData = base64_encode(file_get_contents($filePath));
+    $format    = match($ext) {
+        'mp3'         => 'mp3',
+        'wav'         => 'wav',
+        'ogg'         => 'ogg',
+        'mp4', 'm4a'  => 'mp4',
+        default       => 'webm',
+    };
+
+    $langHint = '';
+    if ($language && $language !== 'auto') {
+        $name     = LANG_NAMES_EN[$language] ?? $language;
+        $langHint = " The speaker is speaking in {$name}.";
+    }
+
+    $systemMsg = "You are a professional transcriptionist.{$langHint}"
+        . " Transcribe the audio exactly as spoken."
+        . ($nonVerbal
+            ? " IMPORTANT: Also detect and include non-verbal sounds in square brackets at the exact position they occur."
+              . " Examples: [laughter] [giggling] [chuckling] [sigh] [deep breath] [cough] [sneeze]"
+              . " [yawn] [crying] [sobbing] [gasp] [hmm] [uh] [wow] [applause] [music] [noise]."
+            : "")
+        . " Output ONLY the transcription, nothing else. No explanations or labels.";
+
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $apiKey,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => json_encode([
+            'model'      => 'gpt-4o-audio-preview',
+            'max_tokens' => 2000,
+            'messages'   => [
+                ['role' => 'system', 'content' => $systemMsg],
+                [
+                    'role'    => 'user',
+                    'content' => [
+                        [
+                            'type'        => 'input_audio',
+                            'input_audio' => ['data' => $audioData, 'format' => $format],
+                        ],
+                        ['type' => 'text', 'text' => 'Transcribe.'],
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    $response = curl_exec($ch);
+    $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr  = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlErr) return ['error' => 'cURL: ' . $curlErr];
+    $decoded = json_decode($response, true) ?? [];
+    if ($code !== 200) return ['error' => $decoded['error']['message'] ?? "HTTP {$code}"];
+
+    return [
+        'text'     => trim($decoded['choices'][0]['message']['content'] ?? ''),
+        'language' => $language,
+    ];
+}
+
 function openaiChat(string $model, array $messages, float $temperature = 0.1): array {
     $apiKey = getSetting('openai_api_key');
     if (empty($apiKey)) return ['error' => 'OpenAI API anahtarı ayarlanmamış'];

@@ -242,7 +242,9 @@ $presetsJson = json_encode(MINIMAX_VOICE_PRESETS, JSON_UNESCAPED_UNICODE);
               style="width:16px;height:16px;accent-color:var(--primary)">
             Konuşma dışı sesleri algıla
             <small style="color:var(--text-muted);display:block;margin-left:26px">
-              Kahkaha [laughter], iç çekme [sigh], öksürme [cough] gibi sesleri metne ekler
+              Kahkaha [laughter], iç çekme [sigh], öksürme [cough] vb.<br>
+              <span style="color:var(--accent)">Açıkken <strong>gpt-4o-audio-preview</strong> kullanılır</span>
+              — ses dosyası modele gönderilip analiz edilir.
             </small>
           </label>
         </div>
